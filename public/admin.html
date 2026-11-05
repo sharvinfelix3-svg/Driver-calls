@@ -1,0 +1,466 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#14213d">
+<title>Driver Calls</title>
+<style>
+  :root {
+    --bg: #f3f1ec; --card: #ffffff; --ink: #1b1d22; --muted: #6b6f78; --line: #e3e0d8;
+    --brand: #14213d; --brand-ink: #ffffff; --accent: #e8a33d;
+    --ok: #1f7a4d; --ok-bg: #e3f3ea; --warn: #9a5b00; --warn-bg: #fdf0d9;
+    --bad: #b3261e; --bad-bg: #fbe5e3; --info: #1d4f91; --info-bg: #e3ecf8; --idle: #5d6168; --idle-bg: #eceae5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #121418; --card: #1c1f25; --ink: #eceae5; --muted: #9a9ea6; --line: #2c3038;
+      --brand: #e8a33d; --brand-ink: #121418;
+      --ok: #6fd3a0; --ok-bg: #173126; --warn: #f2bd6b; --warn-bg: #3a2c12; --bad: #ff8a80; --bad-bg: #3d1a18;
+      --info: #8fb8f0; --info-bg: #182638; --idle: #a9adb4; --idle-bg: #262a31;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink); }
+  body { font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; padding-bottom: calc(76px + env(safe-area-inset-bottom)); }
+  header { background: #14213d; color: #fff; padding: 16px 16px 14px; padding-top: calc(16px + env(safe-area-inset-top)); }
+  header h1 { margin: 0; font-size: 20px; letter-spacing: .2px; }
+  header .sub { opacity: .8; font-size: 14px; margin-top: 2px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .pill { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 99px; background: rgba(255,255,255,.15); }
+  .pill.live { background: #1f7a4d; } .pill.paused { background: #b3261e; } .pill.dry { background: #e8a33d; color: #14213d; }
+  main { max-width: 640px; margin: 0 auto; padding: 12px 16px; }
+  h2 { font-size: 15px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); margin: 22px 2px 8px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px; margin-bottom: 10px; }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .name { font-weight: 700; font-size: 17px; }
+  .muted { color: var(--muted); font-size: 14px; }
+  .line { display: flex; align-items: center; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+  .line .what { width: 64px; color: var(--muted); font-size: 13px; }
+  .chip { font-size: 13px; font-weight: 600; padding: 4px 10px; border-radius: 99px; background: var(--idle-bg); color: var(--idle); }
+  .chip.ok { background: var(--ok-bg); color: var(--ok); } .chip.warn { background: var(--warn-bg); color: var(--warn); }
+  .chip.bad { background: var(--bad-bg); color: var(--bad); } .chip.info { background: var(--info-bg); color: var(--info); }
+  .said { font-size: 13px; color: var(--muted); margin-top: 4px; font-style: italic; }
+  button, .btn { font: inherit; font-size: 15px; font-weight: 600; border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 10px; padding: 9px 12px; cursor: pointer; }
+  button.primary { background: var(--brand); color: var(--brand-ink); border-color: var(--brand); }
+  button.danger { color: var(--bad); }
+  button.small { font-size: 13px; padding: 6px 10px; }
+  button:disabled { opacity: .5; }
+  .btns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+  label { display: block; font-size: 14px; font-weight: 600; margin: 12px 0 4px; }
+  input, select { font: inherit; width: 100%; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .days { display: flex; gap: 6px; flex-wrap: wrap; }
+  .days label { margin: 0; }
+  .days input { display: none; }
+  .days span { display: inline-block; min-width: 46px; text-align: center; padding: 8px 6px; border-radius: 10px; border: 1px solid var(--line); font-size: 14px; font-weight: 600; color: var(--muted); }
+  .days input:checked + span { background: var(--brand); color: var(--brand-ink); border-color: var(--brand); }
+  .hint { font-size: 13px; color: var(--muted); margin-top: 4px; }
+  .banner { border-radius: 12px; padding: 12px 14px; margin: 12px 0; font-size: 14px; background: var(--warn-bg); color: var(--warn); }
+  .banner b { display: block; margin-bottom: 4px; }
+  nav { position: fixed; left: 0; right: 0; bottom: 0; background: var(--card); border-top: 1px solid var(--line); display: flex; padding-bottom: env(safe-area-inset-bottom); }
+  nav button { flex: 1; border: 0; border-radius: 0; background: none; padding: 12px 4px 14px; font-size: 13px; color: var(--muted); }
+  nav button.on { color: var(--ink); box-shadow: inset 0 3px 0 var(--accent); }
+  .tab { display: none; } .tab.on { display: block; }
+  .empty { text-align: center; color: var(--muted); padding: 24px 8px; }
+  .log { font-size: 14px; border-bottom: 1px solid var(--line); padding: 8px 0; display: flex; gap: 10px; }
+  .log time { color: var(--muted); width: 64px; flex: none; font-variant-numeric: tabular-nums; }
+  dialog { border: 0; border-radius: 16px; padding: 0; width: min(560px, calc(100vw - 24px)); background: var(--card); color: var(--ink); }
+  dialog::backdrop { background: rgba(0,0,0,.45); }
+  dialog form { padding: 18px; }
+  dialog h3 { margin: 0 0 4px; }
+  .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(86px + env(safe-area-inset-bottom)); background: #1b1d22; color: #fff; padding: 10px 16px; border-radius: 10px; font-size: 14px; max-width: calc(100vw - 32px); opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 10; }
+  .toast.show { opacity: 1; }
+  .toast.err { background: #b3261e; }
+  #login { max-width: 420px; margin: 40px auto; }
+  .switch { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Driver Calls</h1>
+  <div class="sub"><span id="clock">—</span><span id="mode"></span></div>
+</header>
+
+<main>
+  <section id="login" class="card" hidden>
+    <div class="name">Sign in</div>
+    <p class="muted">Use the ADMIN_TOKEN password you set on the server.</p>
+    <form id="loginForm">
+      <label for="pw">Password</label>
+      <input id="pw" type="password" autocomplete="current-password" required>
+      <div class="btns"><button class="primary" type="submit">Sign in</button></div>
+    </form>
+  </section>
+
+  <div id="app" hidden>
+    <div id="setup"></div>
+
+    <section class="tab on" id="tab-today">
+      <h2>Today</h2>
+      <div id="today"></div>
+      <h2>Tomorrow</h2>
+      <div id="tomorrow"></div>
+      <h2>Controls</h2>
+      <div class="card">
+        <div class="switch">
+          <div><div class="name" style="font-size:16px">Pause all driver calls</div><div class="muted">For public holidays or a day with no jobs.</div></div>
+          <button id="pauseBtn" type="button"></button>
+        </div>
+        <div class="btns"><button type="button" id="testOwner">Test call to my phone</button></div>
+      </div>
+    </section>
+
+    <section class="tab" id="tab-drivers">
+      <h2>Drivers</h2>
+      <div id="drivers"></div>
+      <button class="primary" type="button" id="addDriver" style="width:100%">+ Add driver</button>
+    </section>
+
+    <section class="tab" id="tab-changes">
+      <h2>Day off or different time</h2>
+      <form class="card" id="ovForm">
+        <div class="two">
+          <div><label for="ovDate">Date</label><input id="ovDate" type="date" required></div>
+          <div><label for="ovDriver">Driver</label><select id="ovDriver" required></select></div>
+        </div>
+        <label for="ovType">What changes</label>
+        <select id="ovType">
+          <option value="off">Day off (no calls)</option>
+          <option value="times">Different times</option>
+        </select>
+        <div class="two" id="ovTimes" hidden>
+          <div><label for="ovWake">Wake-up call</label><input id="ovWake" type="time"></div>
+          <div><label for="ovOut">"Dah keluar?" call</label><input id="ovOut" type="time"></div>
+        </div>
+        <div class="hint" id="ovHint" hidden>Leave one empty to skip that call. This also makes them work that day if it's normally off.</div>
+        <div class="btns"><button class="primary" type="submit">Save change</button></div>
+      </form>
+      <h2>Coming up</h2>
+      <div id="overrides"></div>
+    </section>
+
+    <section class="tab" id="tab-log">
+      <h2>What happened</h2>
+      <div class="card" id="log"></div>
+    </section>
+  </div>
+</main>
+
+<nav id="nav" hidden>
+  <button type="button" data-tab="today" class="on">Today</button>
+  <button type="button" data-tab="drivers">Drivers</button>
+  <button type="button" data-tab="changes">Changes</button>
+  <button type="button" data-tab="log">Log</button>
+</nav>
+
+<dialog id="driverDialog">
+  <form id="driverForm" method="dialog">
+    <h3 id="dTitle">Add driver</h3>
+    <label for="dName">Name (said on the call)</label>
+    <input id="dName" required maxlength="40" placeholder="e.g. Ravi">
+    <label for="dPhone">Phone</label>
+    <input id="dPhone" type="tel" required placeholder="012-345 6789">
+    <label for="dLang">Call language</label>
+    <select id="dLang"><option value="ms">Bahasa Melayu</option><option value="en">English</option></select>
+    <div class="two">
+      <div><label for="dWake">Wake-up call</label><input id="dWake" type="time"></div>
+      <div><label for="dOut">"Dah keluar?" call</label><input id="dOut" type="time"></div>
+    </div>
+    <div class="hint">Leave one empty if you only want the other call.</div>
+    <label>Working days</label>
+    <div class="days" id="dDays"></div>
+    <label class="switch" style="margin-top:14px"><span>Active (gets calls)</span><input id="dActive" type="checkbox" style="width:auto"></label>
+    <div class="btns">
+      <button class="primary" type="submit" value="save">Save</button>
+      <button type="button" id="dCancel">Cancel</button>
+      <button type="button" class="danger" id="dDelete" style="margin-left:auto">Delete</button>
+    </div>
+  </form>
+</dialog>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(() => {
+  const DAY = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  let token = '';
+  let state = null;
+  let editingId = null;
+
+  try { token = localStorage.getItem('driverCallsToken') || ''; } catch (e) {}
+
+  function toast(msg, err) {
+    const t = $('toast');
+    t.textContent = msg;
+    t.className = 'toast show' + (err ? ' err' : '');
+    clearTimeout(toast.timer);
+    toast.timer = setTimeout(() => (t.className = 'toast'), 3200);
+  }
+
+  async function api(method, path, body) {
+    const res = await fetch('/api' + path, {
+      method,
+      headers: { 'content-type': 'application/json', 'x-admin-token': token },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 401) { showLogin(); throw new Error('Wrong password'); }
+    if (!res.ok) throw new Error(data.error || 'Something went wrong');
+    return data;
+  }
+
+  async function act(fn, okMsg) {
+    try { await fn(); if (okMsg) toast(okMsg); await refresh(); }
+    catch (e) { toast(e.message, true); }
+  }
+
+  // ---------- time display ----------
+  const fmtTime = (ms) => new Intl.DateTimeFormat('en-GB', { timeZone: state.timezone, hour: 'numeric', minute: '2-digit', hour12: true }).format(new Date(ms)).replace(' ', '');
+  function hhmm(t) {
+    if (!t) return '';
+    let [h, m] = t.split(':').map(Number);
+    const ap = h < 12 ? 'am' : 'pm';
+    h = h % 12 || 12;
+    return `${h}:${String(m).padStart(2, '0')}${ap}`;
+  }
+  const niceDate = (d) => new Date(d + 'T00:00:00Z').toLocaleDateString('en-GB', { timeZone: 'UTC', weekday: 'short', day: 'numeric', month: 'short' });
+
+  // ---------- status chips ----------
+  function wakeChip(f, time) {
+    switch (f.state) {
+      case 'waiting': return chip('', time ? `Wake-up at ${hhmm(time)}` : 'No wake-up call');
+      case 'calling': return chip('info', `Calling now (try ${f.attempts})`);
+      case 'scheduled': return chip('warn', `No answer · trying again ${fmtTime(f.nextAt)}`);
+      case 'done': return chip('ok', `Awake · ${fmtTime(f.doneAt)}`);
+      case 'alerted': return chip('bad', `No answer ${f.attempts}× · you were called`);
+      case 'missed': return chip('warn', 'Missed (system was off)');
+      default: return chip('', f.state);
+    }
+  }
+  function outChip(f, time) {
+    switch (f.state) {
+      case 'waiting': return chip('', time ? `Check at ${hhmm(time)}` : 'No check call');
+      case 'calling': return chip('info', `Calling now (try ${f.attempts})`);
+      case 'scheduled': return f.result === 'not_yet' && f.attempts === 0
+        ? chip('warn', `Belum keluar · asking again ${fmtTime(f.nextAt)}`)
+        : chip('warn', `No answer · trying again ${fmtTime(f.nextAt)}`);
+      case 'done': return chip('ok', `Dah keluar · ${fmtTime(f.doneAt)}`);
+      case 'alerted':
+        if (f.result === 'problem') return chip('bad', 'Problem · you were called');
+        if (f.result === 'not_out') return chip('bad', `Still not out · you were called`);
+        return chip('bad', `No answer ${f.attempts}× · you were called`);
+      case 'missed': return chip('warn', 'Missed (system was off)');
+      default: return chip('', f.state);
+    }
+  }
+  const chip = (cls, text) => `<span class="chip ${cls}">${esc(text)}</span>`;
+
+  // ---------- render ----------
+  function render() {
+    const s = state;
+    $('clock').textContent = `${niceDate(s.date)} · ${hhmm(s.time)}`;
+    $('mode').innerHTML = s.status.dryRun ? '<span class="pill dry">Dry run</span>' : s.paused ? '<span class="pill paused">Paused</span>' : '<span class="pill live">Live</span>';
+
+    const missing = [];
+    if (!s.status.dryRun && !s.status.twilio) missing.push('Twilio details (calls cannot go out)');
+    if (!s.status.dryRun && !s.status.publicUrl) missing.push('PUBLIC_URL (calls cannot hear keypresses)');
+    if (!s.status.owner) missing.push('OWNER_PHONE (you will not get alert calls)');
+    $('setup').innerHTML = missing.length ? `<div class="banner"><b>Server setup not finished</b>${missing.map(esc).join('<br>')}</div>` : '';
+
+    // Today
+    const working = s.drivers.filter((d) => d.today.schedule);
+    const off = s.drivers.filter((d) => !d.today.schedule);
+    $('today').innerHTML = !s.drivers.length
+      ? '<div class="card empty">No drivers yet. Add them in the Drivers tab.</div>'
+      : working.map((d) => {
+          const sc = d.today.schedule;
+          const said = d.today.out.lastAnswer && d.today.out.result === 'problem' && !/^key /.test(d.today.out.lastAnswer) ? `<div class="said">Said: “${esc(d.today.out.lastAnswer)}”</div>` : '';
+          return `<div class="card">
+            <div class="row"><div class="name">${esc(d.name)}</div><a class="muted" href="tel:${esc(d.phone)}">Call ${esc(local(d.phone))}</a></div>
+            ${sc.changed ? '<div class="muted">Changed times today</div>' : ''}
+            ${sc.wakeTime ? `<div class="line"><span class="what">Wake-up</span>${wakeChip(d.today.wake, sc.wakeTime)}</div>` : ''}
+            ${sc.outTime ? `<div class="line"><span class="what">Keluar</span>${outChip(d.today.out, sc.outTime)}</div>${said}` : ''}
+            <div class="btns">
+              ${sc.wakeTime ? `<button class="small" data-now="wake" data-id="${d.id}">Wake-up call now</button>` : ''}
+              ${sc.outTime ? `<button class="small" data-now="out" data-id="${d.id}">Check call now</button>` : ''}
+            </div>
+          </div>`;
+        }).join('') + (off.length ? `<div class="card muted">Off today: ${off.map((d) => esc(d.name) + (d.active === false ? ' (inactive)' : '')).join(', ')}</div>` : '');
+
+    // Tomorrow
+    $('tomorrow').innerHTML = !s.drivers.length ? '' : `<div class="card">${s.drivers.map((d) => {
+      const t = d.tomorrow;
+      const ov = s.overrides.find((o) => o.date === s.tomorrow && o.driverId === d.id);
+      const desc = !t ? 'Off' : [t.wakeTime && `wake ${hhmm(t.wakeTime)}`, t.outTime && `check ${hhmm(t.outTime)}`].filter(Boolean).join(' · ');
+      return `<div class="row" style="padding:6px 0">
+        <div><b>${esc(d.name)}</b> <span class="muted">${esc(desc)}${ov ? ' (changed)' : ''}</span></div>
+        ${ov ? `<button class="small" data-clear="${s.tomorrow}|${d.id}">Undo</button>`
+             : t ? `<button class="small" data-offtmr="${d.id}">Off tomorrow</button>` : ''}
+      </div>`;
+    }).join('')}<div class="hint">For other dates or different times, use the Changes tab.</div></div>`;
+
+    $('pauseBtn').textContent = s.paused ? 'Resume' : 'Pause';
+    $('pauseBtn').className = s.paused ? 'primary' : '';
+
+    // Drivers
+    $('drivers').innerHTML = !s.drivers.length ? '<div class="card empty">No drivers yet.</div>' : s.drivers.map((d) => `
+      <div class="card">
+        <div class="row"><div class="name">${esc(d.name)}${d.active === false ? ' <span class="chip">Inactive</span>' : ''}</div><button class="small" data-edit="${d.id}">Edit</button></div>
+        <div class="muted">${esc(local(d.phone))} · ${d.lang === 'en' ? 'English' : 'Melayu'}</div>
+        <div class="muted">${d.wakeTime ? 'Wake-up ' + hhmm(d.wakeTime) : 'No wake-up call'} · ${d.outTime ? 'Check ' + hhmm(d.outTime) : 'No check call'}</div>
+        <div class="muted">${d.days.length === 7 ? 'Every day' : d.days.map((n) => DAY[n]).join(', ')}</div>
+        <div class="btns">
+          <button class="small" data-test="wake" data-id="${d.id}">Test wake-up call</button>
+          <button class="small" data-test="out" data-id="${d.id}">Test check call</button>
+        </div>
+      </div>`).join('');
+
+    // Changes
+    const sel = $('ovDriver');
+    const keep = sel.value;
+    sel.innerHTML = s.drivers.map((d) => `<option value="${d.id}">${esc(d.name)}</option>`).join('');
+    if (keep) sel.value = keep;
+    if (!$('ovDate').value) $('ovDate').value = s.tomorrow;
+    $('ovDate').min = s.date;
+    const name = (id) => (s.drivers.find((d) => d.id === id) || {}).name || '(removed)';
+    $('overrides').innerHTML = !s.overrides.length ? '<div class="card empty">No changes coming up.</div>' : s.overrides.map((o) => `
+      <div class="card row">
+        <div><b>${esc(niceDate(o.date))}</b> · ${esc(name(o.driverId))}<div class="muted">${o.off ? 'Day off' : [o.wakeTime ? 'wake ' + hhmm(o.wakeTime) : 'no wake-up', o.outTime ? 'check ' + hhmm(o.outTime) : 'no check'].join(' · ')}</div></div>
+        <button class="small" data-clear="${o.date}|${o.driverId}">Remove</button>
+      </div>`).join('');
+
+    // Log
+    $('log').innerHTML = !s.log.length ? '<div class="empty">Nothing yet.</div>' : s.log.map((e) => `<div class="log"><time>${fmtTime(e.at)}</time><div>${esc(describe(e, name))}</div></div>`).join('');
+  }
+
+  function local(p) { return String(p || '').replace(/^\+60/, '0'); }
+
+  function describe(e, name) {
+    const who = e.driverId ? name(e.driverId) : '';
+    const call = e.kind === 'wake' ? 'wake-up call' : 'check call';
+    switch (e.event) {
+      case 'calling': return `Calling ${who}: ${call} (try ${e.attempt})`;
+      case 'test_call': return `Test ${call} to ${who}`;
+      case 'awake': return `${who} is awake`;
+      case 'out': return `${who} dah keluar`;
+      case 'not_yet': return `${who} belum keluar (${e.count}×)`;
+      case 'problem': return `${who} pressed problem${e.said ? `: “${e.said}”` : ''}`;
+      case 'no_answer': return `${who} did not answer the ${call} (try ${e.attempt})`;
+      case 'missed': return `Skipped ${call} for ${who}: system was off`;
+      case 'alert_owner': return `Calling you: ${e.message}`;
+      case 'owner_confirmed': return 'You confirmed the alert call';
+      case 'owner_no_answer': return `You did not answer the alert call (${e.attempts} tries)`;
+      case 'driver_added': return `Added driver ${who}`;
+      case 'paused': return 'All driver calls paused';
+      case 'resumed': return 'Driver calls resumed';
+      default: return e.event;
+    }
+  }
+
+  async function refresh() {
+    if (!token) return showLogin();
+    try {
+      state = await api('GET', '/state');
+      $('login').hidden = true; $('app').hidden = false; $('nav').hidden = false;
+      render();
+    } catch (e) {
+      if (e.message !== 'Wrong password') toast(e.message, true);
+    }
+  }
+
+  function showLogin() {
+    try { localStorage.removeItem('driverCallsToken'); } catch (e) {}
+    token = '';
+    $('login').hidden = false; $('app').hidden = true; $('nav').hidden = true;
+  }
+
+  // ---------- driver dialog ----------
+  $('dDays').innerHTML = DAY.map((d, i) => `<label><input type="checkbox" value="${i}"><span>${d}</span></label>`).join('');
+  function openDriver(d) {
+    editingId = d ? d.id : null;
+    $('dTitle').textContent = d ? 'Edit driver' : 'Add driver';
+    $('dName').value = d ? d.name : '';
+    $('dPhone').value = d ? local(d.phone) : '';
+    $('dLang').value = d ? d.lang : 'ms';
+    $('dWake').value = d ? d.wakeTime : '05:30';
+    $('dOut').value = d ? d.outTime : '06:30';
+    const days = d ? d.days : [1, 2, 3, 4, 5, 6];
+    $('dDays').querySelectorAll('input').forEach((c) => (c.checked = days.includes(Number(c.value))));
+    $('dActive').checked = d ? d.active !== false : true;
+    $('dDelete').hidden = !d;
+    $('driverDialog').showModal();
+  }
+  $('addDriver').onclick = () => openDriver(null);
+  $('dCancel').onclick = () => $('driverDialog').close();
+  $('driverForm').onsubmit = (ev) => {
+    ev.preventDefault();
+    const body = {
+      name: $('dName').value, phone: $('dPhone').value, lang: $('dLang').value,
+      wakeTime: $('dWake').value, outTime: $('dOut').value, active: $('dActive').checked,
+      days: [...$('dDays').querySelectorAll('input:checked')].map((c) => Number(c.value)),
+    };
+    act(async () => {
+      if (editingId) await api('PUT', '/drivers/' + editingId, body);
+      else await api('POST', '/drivers', body);
+      $('driverDialog').close();
+    }, 'Saved');
+  };
+  $('dDelete').onclick = () => {
+    const d = state.drivers.find((x) => x.id === editingId);
+    if (!d || !confirm(`Delete ${d.name}? Their calls stop.`)) return;
+    act(async () => { await api('DELETE', '/drivers/' + editingId); $('driverDialog').close(); }, 'Deleted');
+  };
+
+  // ---------- changes form ----------
+  $('ovType').onchange = () => { const t = $('ovType').value === 'times'; $('ovTimes').hidden = !t; $('ovHint').hidden = !t; };
+  $('ovForm').onsubmit = (ev) => {
+    ev.preventDefault();
+    const off = $('ovType').value === 'off';
+    act(() => api('PUT', '/overrides', { date: $('ovDate').value, driverId: $('ovDriver').value, off, wakeTime: $('ovWake').value, outTime: $('ovOut').value }), 'Change saved');
+  };
+
+  // ---------- buttons inside lists ----------
+  document.addEventListener('click', (ev) => {
+    const b = ev.target.closest('button');
+    if (!b) return;
+    if (b.dataset.tab) {
+      document.querySelectorAll('nav button').forEach((x) => x.classList.toggle('on', x === b));
+      document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('on', t.id === 'tab-' + b.dataset.tab));
+      window.scrollTo(0, 0);
+    } else if (b.dataset.edit) {
+      openDriver(state.drivers.find((d) => d.id === b.dataset.edit));
+    } else if (b.dataset.test) {
+      act(() => api('POST', '/test-call', { driverId: b.dataset.id, kind: b.dataset.test }), 'Test call started');
+    } else if (b.dataset.now) {
+      const d = state.drivers.find((x) => x.id === b.dataset.id);
+      const what = b.dataset.now === 'wake' ? 'wake-up' : 'check';
+      if (!confirm(`Start ${d.name}'s ${what} call now? It replaces today's ${what} call, with retries and alerts as normal.`)) return;
+      act(() => api('POST', '/call-now', { driverId: b.dataset.id, kind: b.dataset.now }), 'Calling');
+    } else if (b.dataset.offtmr) {
+      act(() => api('PUT', '/overrides', { date: state.tomorrow, driverId: b.dataset.offtmr, off: true }), 'Off tomorrow');
+    } else if (b.dataset.clear) {
+      const [date, driverId] = b.dataset.clear.split('|');
+      act(() => api('DELETE', `/overrides?date=${encodeURIComponent(date)}&driverId=${encodeURIComponent(driverId)}`), 'Removed');
+    } else if (b.id === 'pauseBtn') {
+      act(() => api('POST', '/pause', { paused: !state.paused }), state.paused ? 'Calls resumed' : 'Calls paused');
+    } else if (b.id === 'testOwner') {
+      act(() => api('POST', '/test-owner'), 'Calling your phone');
+    }
+  });
+
+  $('loginForm').onsubmit = (ev) => {
+    ev.preventDefault();
+    token = $('pw').value.trim();
+    try { localStorage.setItem('driverCallsToken', token); } catch (e) {}
+    refresh();
+  };
+
+  refresh();
+  setInterval(() => { if (token && !document.hidden && !$('driverDialog').open) refresh(); }, 15000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && token) refresh(); });
+})();
+</script>
+</body>
+</html>
