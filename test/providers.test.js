@@ -46,3 +46,10 @@ test('Telnyx errors are explained', async () => {
   await assert.rejects(fail(404, 'not found'), /TELNYX_APP_ID/);
   await assert.rejects(fail(402, 'insufficient balance'), /Top up/);
 });
+
+test('OWNER_PHONE in local format gets the country code', () => {
+  assert.equal(load({ OWNER_PHONE: '0146472974' }).owner.phone, '+60146472974');
+  assert.equal(load({ OWNER_PHONE: '014-647 2974' }).owner.phone, '+60146472974');
+  assert.equal(load({ OWNER_PHONE: '+60146472974' }).owner.phone, '+60146472974');
+  assert.equal(load({}).owner.phone, '');
+});

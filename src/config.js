@@ -3,6 +3,7 @@
 require('dotenv').config();
 const crypto = require('crypto');
 const path = require('path');
+const { normalizePhone } = require('./phone');
 
 const num = (v, d) => (v === undefined || v === '' || Number.isNaN(Number(v)) ? d : Number(v));
 const bool = (v, d) => (v === undefined || v === '' ? d : /^(1|true|yes|on)$/i.test(String(v)));
@@ -89,7 +90,8 @@ function load(env = process.env) {
     },
 
     owner: {
-      phone: env.OWNER_PHONE || '',
+      // 0146472974 -> +60146472974 (calling services need the country code)
+      phone: normalizePhone(env.OWNER_PHONE) || String(env.OWNER_PHONE || '').trim(),
       lang: env.OWNER_LANG === 'en' ? 'en' : 'ms',
     },
 
