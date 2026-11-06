@@ -6,9 +6,9 @@ const twilio = require('twilio');
 const { load } = require('./config');
 const { createStore } = require('./store');
 const { createEngine } = require('./engine');
-const { makeProvider, missingProviderSettings } = require('./providers');
+const { makeProvider, missingProviderSettings, saveVonageKey, VONAGE_END_STATUSES } = require('./providers');
 
-function createApp({ config, engine, log = console }) {
+function createApp({ config, engine, provider = null, log = console }) {
   const app = express();
   app.disable('x-powered-by');
   app.set('trust proxy', true);
@@ -21,17 +21,23 @@ function createApp({ config, engine, log = console }) {
   const HANGUP = '<?xml version="1.0" encoding="UTF-8"?><Response><Hangup/></Response>';
   const voice = express.Router();
   voice.use(express.urlencoded({ extended: false }));
-  voice.use(express.json({ limit: '50kb' }));
+  voice.use(express.json({ limit: '100kb' }));
   const params = (req) => ({ ...req.query, ...(req.body && typeof req.body === 'object' ? req.body : {}) });
 
   // Someone rings your calling number back: a short message, then hang up.
+  const isVonage = config.provider === 'vonage';
+  const vonageNcco = (xml) => (provider && provider.ncco ? provider.ncco.fromTwiml(xml) : []);
   voice.all('/inbound', (req, res) => {
     const v = config.voices.ms;
+    const text = `Ini nombor sistem panggilan pemandu ${config.companyName}. Untuk sebarang hal, sila telefon boss terus. Terima kasih.`;
+    if (isVonage) return res.json([{ action: 'talk', text, language: 'ms-MY' }]);
     const r = new twilio.twiml.VoiceResponse();
-    r.say({ voice: v.voice, language: v.language }, `Ini nombor sistem panggilan pemandu ${config.companyName}. Untuk sebarang hal, sila telefon boss terus. Terima kasih.`);
+    r.say({ voice: v.voice, language: v.language }, text);
     r.hangup();
     res.type('text/xml').send(r.toString());
   });
+  // Vonage sends general call events here (set as the app's Event URL). Nothing to do.
+  voice.all('/events', (req, res) => res.sendStatus(204));
 
   // Everything else must carry the secret key, so nobody can fake a driver's answer.
   voice.use((req, res, next) => {
@@ -57,18 +63,35 @@ function createApp({ config, engine, log = console }) {
     res.type('text/xml').send(engine.getTwiml(String(req.query.cid || '')));
   });
   voice.all('/gather', async (req, res) => {
+    const cid = String(req.query.cid || '');
     try {
-      const xml = await engine.handleGather(String(req.query.cid || ''), params(req));
+      if (isVonage) {
+        const b = req.body || {};
+        const digits = String((b.dtmf && b.dtmf.digits) || '');
+        const results = (b.speech && b.speech.results) || [];
+        const speech = String((results[0] && results[0].text) || '');
+        // Nothing pressed or said: carry on with the rest of the call script
+        if (!digits && !speech) return res.json(provider ? provider.ncco.continueAfter(req.query.gid) : []);
+        return res.json(vonageNcco(await engine.handleGather(cid, { Digits: digits, SpeechResult: speech })));
+      }
+      const xml = await engine.handleGather(cid, params(req));
       res.type('text/xml').send(xml);
     } catch (e) {
       log.error(`[voice] gather failed: ${e.stack || e.message}`);
+      if (isVonage) return res.json(provider ? provider.ncco.continueAfter('') : []);
       res.type('text/xml').send(HANGUP);
     }
   });
   voice.all('/status', (req, res) => {
     try {
       const p = params(req);
-      engine.handleStatus(String(req.query.cid || ''), p.CallStatus || p.call_status || 'completed');
+      if (isVonage) {
+        // Vonage reports every step (started, ringing, answered...). Only the end matters.
+        const st = String(p.status || '');
+        if (VONAGE_END_STATUSES.has(st)) engine.handleStatus(String(req.query.cid || ''), st);
+      } else {
+        engine.handleStatus(String(req.query.cid || ''), p.CallStatus || p.call_status || 'completed');
+      }
     } catch (e) {
       log.error(`[voice] status failed: ${e.stack || e.message}`);
     }
@@ -78,7 +101,7 @@ function createApp({ config, engine, log = console }) {
 
   // ---------- your phone page ----------
   const api = express.Router();
-  api.use(express.json({ limit: '50kb' }));
+  api.use(express.json({ limit: '100kb' }));
   api.use((req, res, next) => {
     if (!config.adminToken) return res.status(503).json({ error: 'ADMIN_TOKEN is not set on the server yet' });
     const got = Buffer.from(String(req.get('x-admin-token') || ''));
@@ -108,6 +131,10 @@ function createApp({ config, engine, log = console }) {
     await engine.testCall(b.driverId, b.kind);
   }));
   api.post('/test-owner', wrap(() => engine.testOwnerCall()));
+  api.post('/vonage-key', wrap((req, b) => {
+    if (config.provider !== 'vonage') throw new Error('This server is not set to use Vonage');
+    saveVonageKey(config.vonage, b.pem);
+  }));
   app.use('/api', api);
 
   return app;
@@ -118,7 +145,7 @@ function start() {
   const store = createStore(path.resolve(config.dataDir, 'db.json'));
   const client = makeProvider(config);
   const engine = createEngine({ config, store, client });
-  const app = createApp({ config, engine });
+  const app = createApp({ config, engine, provider: client });
 
   app.listen(config.port, () => {
     console.log(`Driver call system running on port ${config.port} using ${config.providerName}${config.dryRun ? ' (DRY RUN: no real calls)' : ''}`);
@@ -128,6 +155,7 @@ function start() {
     if (!config.dryRun && !client) missing.push(`${config.providerName}: ${missingProviderSettings(config).join(', ')}`);
     if (!config.dryRun && !config.publicUrl) missing.push('PUBLIC_URL');
     if (!config.owner.phone) missing.push('OWNER_PHONE (your number, for alerts)');
+    if (config.storageWarning) console.warn(`WARNING: ${config.storageWarning}`);
     if (missing.length) console.warn(`Not set yet:\n  - ${missing.join('\n  - ')}`);
     if (!config.ai.apiKey) console.log('ANTHROPIC_API_KEY not set: spoken answers use keyword matching (keypresses always work).');
   });

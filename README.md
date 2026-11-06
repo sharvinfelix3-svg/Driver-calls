@@ -1,6 +1,6 @@
 # Driver Wake-up & "Dah Keluar?" Calls
 
-Phones your lorry drivers every working morning (through Telnyx or Twilio), checks they're on the road, and phones **you** only when something is wrong.
+Phones your lorry drivers every working morning (through Vonage, Telnyx or Twilio), checks they're on the road, and phones **you** only when something is wrong.
 
 ## What happens each morning
 
@@ -20,7 +20,7 @@ Phones your lorry drivers every working morning (through Telnyx or Twilio), chec
 | **3** / "lori rosak", "tayar pancit" | **You get a call right away**, with what he said. |
 | No answer ×3 | **You get a call.** |
 
-Spoken answers (the words in quotes) work when `SPEECH_INPUT=true`. That's on by default with Twilio and off with Telnyx, where keypresses are the reliable way.
+Spoken answers (the words in quotes) work when `SPEECH_INPUT=true`. That's on by default with Twilio and off with Vonage and Telnyx, where keypresses are the reliable way.
 
 **Your alert call** says who, what happened, and reads out the driver's number. Press 1 to confirm. If you don't, it tries 2 more times.
 
@@ -40,7 +40,7 @@ The check call waits until the wake-up call is finished, and only one call goes 
 npm install
 cp .env.example .env      # set ADMIN_TOKEN at least
 npm run dry               # open http://localhost:3000/admin
-npm test                  # 37 automated tests
+npm test                  # 45 automated tests
 ```
 
 Going live: see **SETUP.md**.
@@ -50,6 +50,6 @@ Going live: see **SETUP.md**.
 - `src/engine.js`: who to call and when, retries, alerts
 - `src/messages.js`: **everything the calls say** (edit wording here)
 - `src/classify.js`: understanding "dah / belum / masalah"
-- `src/providers.js`: Telnyx and Twilio (the calling services)
+- `src/providers.js`: Vonage, Telnyx and Twilio (the calling services)
 - `src/server.js`: web server for the calling service and the phone page
 - `public/admin.html`: the phone page

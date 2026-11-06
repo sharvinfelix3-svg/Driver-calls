@@ -89,6 +89,7 @@ function createEngine({ config, store, client = null, now = () => Date.now(), cl
     if (!client) throw new Error(`${config.providerName} is not set up yet, so no call was made`);
     if (!config.publicUrl) throw new Error('PUBLIC_URL is not set, so calls cannot hear keypresses');
     return client.calls.create({
+      cid,
       to,
       from: config.callerId,
       twiml,
@@ -641,6 +642,7 @@ function createEngine({ config, store, client = null, now = () => Date.now(), cl
         provider: config.providerName,
         calls: !!client,
         missing: missingProviderSettings(config),
+        storageWarning: config.storageWarning,
         publicUrl: !!config.publicUrl,
         owner: !!config.owner.phone,
         ai: !!config.ai.apiKey,

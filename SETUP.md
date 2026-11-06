@@ -1,6 +1,6 @@
 # Going live
 
-You need: a calling service (**Telnyx**, or Twilio), a host that stays on 24/7 (**Railway**), and your drivers' numbers. All of it can be done from a phone browser.
+You need: a calling service (**Vonage**, or Telnyx / Twilio), a host that stays on 24/7 (**Railway**), and your drivers' numbers. All of it can be done from a phone browser.
 
 > **Important:** the host must never sleep. Free plans that sleep when nobody visits will miss 5am calls. Railway on the Hobby plan is fine.
 
@@ -20,36 +20,42 @@ You need: a calling service (**Telnyx**, or Twilio), a host that stays on 24/7 (
 
 5. Switch to the **Hobby** plan before going live (the trial credit runs out).
 
-## 2. Telnyx (calling service)
+## 2. Vonage (calling service)
 
-Menu names in Telnyx may differ slightly. If a screen looks different, send a screenshot.
+Vonage's menus may look a bit different from these steps. If a screen doesn't match, send a screenshot.
 
-1. **Sign up** at telnyx.com and confirm your email.
-2. **Billing**: add your card and top up a small amount (e.g. US$10).
-3. **Verification**: Account Settings → **Verifications** (or **Account Levels**). Complete **Level 2 / Verified**. This is what allows calls to Malaysia. Review can take up to 48 hours.
-4. **Outbound Voice Profile**: Voice → **Outbound Voice Profiles** → **Add**. Name it `Driver calls`, add **Malaysia** to the allowed destinations, then save.
-5. **TeXML Application**: Voice → Programmable Voice → **TeXML Applications** → **Add new app**.
+1. Open the **Vonage API Dashboard** (dashboard.nexmo.com) and sign in.
+2. **Applications → Create a new application**.
    - Name: `Driver calls`
-   - Webhook URL ("Send a TeXML Webhook to the URL"): `https://your-domain.up.railway.app/voice/inbound`
-   - Voice method: **POST**
-   - Outbound: choose the `Driver calls` Outbound Voice Profile
-   - Save, then copy the app's **ID**.
-6. **Buy a number**: Numbers → **Search & Buy**. Pick any country with **Voice** (a US number works for calling Malaysia) and assign it to the `Driver calls` app.
-7. **API key**: Account Settings → **Keys & Credentials** → **API Keys** → **Create**. Copy it. It's shown once, and you shouldn't share it.
-8. Back in **Railway → Variables**, add:
+   - Tap **Generate public and private key**. A file called **private.key** downloads to your phone. Keep it, and don't send it to anyone.
+   - Turn on **Voice**:
+     - Answer URL: `https://your-domain.up.railway.app/voice/inbound` (HTTP GET)
+     - Event URL: `https://your-domain.up.railway.app/voice/events` (HTTP POST)
+   - Tap **Generate new application**, then copy the **Application ID**.
+3. **Railway → Variables**: add `VONAGE_APPLICATION_ID` with that ID. Railway redeploys by itself.
+4. Open your **phone page → Today → Controls → Vonage key → Upload private.key** and pick the file from Downloads.
+5. Tap **Test call to my phone**. On the free trial, `OWNER_PHONE` must be the number you signed up to Vonage with.
 
-| Variable | Value |
-|---|---|
-| `TELNYX_API_KEY` | the key from step 7 |
-| `TELNYX_APP_ID` | the app ID from step 5 |
-| `TELNYX_FROM_NUMBER` | the number from step 6, in + format, e.g. `+12025550123` |
+**To call your drivers** (the trial can only call your own number):
 
-Railway redeploys by itself. The phone page's "Server setup not finished" box should disappear.
+6. **Billing**: add credit.
+7. **Numbers → Buy numbers**: buy one with **Voice**. A US number is fine for calling Malaysia. Link it to the `Driver calls` application.
+8. **Railway → Variables**: add `VONAGE_FROM_NUMBER`, e.g. `12015550123`.
+
+<details>
+<summary>Using Telnyx instead</summary>
+
+1. Sign up at telnyx.com, add a card, and complete **Level 2** verification (this allows calls to Malaysia).
+2. **Outbound Voice Profiles → Add**, and allow **Malaysia**.
+3. **TeXML Applications → Add new app**. Set the webhook URL to `https://your-domain/voice/inbound` (POST), pick the profile, and copy the app ID.
+4. Buy a number with Voice and assign it to the app. Create an **API key**.
+5. Railway variables: `TELNYX_API_KEY`, `TELNYX_APP_ID`, `TELNYX_FROM_NUMBER` (+ format).
+</details>
 
 <details>
 <summary>Using Twilio instead</summary>
 
-Set `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` and `TWILIO_FROM_NUMBER` instead of the Telnyx ones. Turn on Malaysia in Twilio → Voice → Settings → Geo permissions.
+Set `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` and `TWILIO_FROM_NUMBER`. Turn on Malaysia in Twilio → Voice → Settings → Geo permissions.
 </details>
 
 ## 3. Test on your phone
@@ -78,14 +84,16 @@ Ask them to **save the calling number as a contact** (e.g. "Wake-up Call PVL") s
 
 ## If something's wrong
 
-Check the **Log** tab first, then Railway → Driver-calls → **Deployments → View logs**. Errors from Telnyx come with a plain-English hint.
+Check the **Log** tab first, then Railway → Driver-calls → **Deployments → View logs**. Errors from Vonage and Telnyx come with a plain-English hint.
 
 | Problem | Fix |
 |---|---|
 | "Server setup not finished" | It names the missing variable. |
+| Log says "only call the number you signed up with" | You're on the Vonage trial. Add credit and buy a number (steps 6–8). |
+| Log says "private.key is missing" | Upload it on the phone page (Controls → Vonage key). Attach the `/data` Volume first, or it's lost on restart. |
 | Log says Telnyx "has not allowed this call" | Finish Level 2 verification, and allow Malaysia in the Outbound Voice Profile. |
 | Log says "could not find the TeXML application" | Check `TELNYX_APP_ID`. If Telnyx support says to use the newer call address, also set `TELNYX_ACCOUNT_SID`. |
 | Phone rings but it's silent or hangs up at once | `PUBLIC_URL` must be exactly your https domain. |
 | Malay voice sounds wrong | Set `VOICE_MS=Azure.ms-MY-OsmanNeural` (male voice). |
-| Drivers vanished after a redeploy | The volume isn't mounted at `/data`, or `DATA_DIR` isn't `/data`. |
+| Phone page warns "No Railway Volume attached" | Attach a Volume with mount path `/data`, and set `DATA_DIR=/data`. |
 | Log says "Skipped ... system was off" | The server was down at call time for more than 30 minutes. Check Railway. |

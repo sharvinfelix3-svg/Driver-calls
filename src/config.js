@@ -2,6 +2,7 @@
 // or the "Variables" screen on your host). See .env.example.
 require('dotenv').config();
 const crypto = require('crypto');
+const path = require('path');
 
 const num = (v, d) => (v === undefined || v === '' || Number.isNaN(Number(v)) ? d : Number(v));
 const bool = (v, d) => (v === undefined || v === '' ? d : /^(1|true|yes|on)$/i.test(String(v)));
@@ -10,17 +11,33 @@ const bool = (v, d) => (v === undefined || v === '' ? d : /^(1|true|yes|on)$/i.t
 const VOICE_DEFAULTS = {
   twilio: { ms: 'Google.ms-MY-Standard-A', en: 'Google.en-US-Standard-C' },
   telnyx: { ms: 'Azure.ms-MY-YasminNeural', en: 'Azure.en-US-JennyNeural' },
+  vonage: { ms: 'vonage', en: 'vonage' }, // Vonage picks the voice from the language
 };
+const NAMES = { twilio: 'Twilio', telnyx: 'Telnyx', vonage: 'Vonage' };
+
+/** Warn if Railway has no storage attached, so a restart would wipe the drivers list. */
+function storageWarning(env, dataDir) {
+  const onRailway = !!(env.RAILWAY_ENVIRONMENT || env.RAILWAY_PROJECT_ID || env.RAILWAY_SERVICE_ID);
+  if (!onRailway) return '';
+  const mount = env.RAILWAY_VOLUME_MOUNT_PATH || '';
+  if (!mount) return 'No Railway Volume attached. Drivers and settings will be lost when Railway restarts. Attach a Volume with mount path /data.';
+  const dir = path.resolve(dataDir);
+  const m = path.resolve(mount);
+  if (dir !== m && !dir.startsWith(m + path.sep)) return `Set DATA_DIR to ${mount} (your Volume), or drivers will be lost when Railway restarts.`;
+  return '';
+}
 
 function load(env = process.env) {
-  // Which calling service to use. Picks Telnyx automatically if its key is set.
-  const provider = /^telnyx$/i.test(env.CALL_PROVIDER || '')
-    ? 'telnyx'
-    : /^twilio$/i.test(env.CALL_PROVIDER || '')
-      ? 'twilio'
-      : env.TELNYX_API_KEY
-        ? 'telnyx'
+  // Which calling service to use. CALL_PROVIDER wins; otherwise it follows which keys are filled in.
+  const asked = String(env.CALL_PROVIDER || '').toLowerCase();
+  const provider = NAMES[asked]
+    ? asked
+    : env.TELNYX_API_KEY
+      ? 'telnyx'
+      : env.VONAGE_APPLICATION_ID
+        ? 'vonage'
         : 'twilio';
+  const dataDir = env.DATA_DIR || './data';
   const adminToken = env.ADMIN_TOKEN || '';
   // Secret added to every link the calling service calls back on, so nobody else can fake answers.
   const webhookKey =
@@ -31,16 +48,19 @@ function load(env = process.env) {
     publicUrl: String(env.PUBLIC_URL || '').trim().replace(/\/+$/, ''),
     adminToken,
     webhookKey,
-    dataDir: env.DATA_DIR || './data',
+    dataDir,
+    storageWarning: storageWarning(env, dataDir),
     timezone: env.TIMEZONE || 'Asia/Kuala_Lumpur',
     companyName: env.COMPANY_NAME || 'Pacific Venture Logistics',
     dryRun: bool(env.DRY_RUN, false),
     validateTwilioSignature: bool(env.VALIDATE_TWILIO_SIGNATURE, true),
 
     provider,
-    providerName: provider === 'telnyx' ? 'Telnyx' : 'Twilio',
+    providerName: NAMES[provider],
     // The number your drivers see calling them
-    callerId: (provider === 'telnyx' ? env.TELNYX_FROM_NUMBER : env.TWILIO_FROM_NUMBER) || '',
+    // (Vonage trial: 123456789 is Vonage's test caller ID, which can only call your own number)
+    callerId:
+      (provider === 'telnyx' ? env.TELNYX_FROM_NUMBER : provider === 'vonage' ? env.VONAGE_FROM_NUMBER || '123456789' : env.TWILIO_FROM_NUMBER) || '',
     ringSeconds: num(env.RING_SECONDS, 40),
     // Let drivers answer by speaking as well as pressing keys
     speechInput: bool(env.SPEECH_INPUT, provider === 'twilio'),
@@ -49,6 +69,16 @@ function load(env = process.env) {
       accountSid: env.TWILIO_ACCOUNT_SID || '',
       authToken: env.TWILIO_AUTH_TOKEN || '',
       from: env.TWILIO_FROM_NUMBER || '',
+    },
+
+    vonage: {
+      appId: env.VONAGE_APPLICATION_ID || '',
+      from: env.VONAGE_FROM_NUMBER || '',
+      // Either paste the key here, or upload private.key on the phone page (saved in DATA_DIR)
+      privateKey: String(env.VONAGE_PRIVATE_KEY || '').replace(/\\n/g, '\n').trim(),
+      keyFile: path.resolve(dataDir, 'vonage-private.key'),
+      styleMs: env.VONAGE_STYLE_MS || '',
+      styleEn: env.VONAGE_STYLE_EN || '',
     },
 
     telnyx: {

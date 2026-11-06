@@ -108,6 +108,12 @@
         </div>
         <div class="btns"><button type="button" id="testOwner">Test call to my phone</button></div>
       </div>
+      <div class="card" id="vonageCard" hidden>
+        <div class="name" style="font-size:16px">Vonage key</div>
+        <div class="muted" id="vonageKeyStatus"></div>
+        <label for="vonageKey" class="btn" style="display:inline-block;margin-top:12px;font-weight:600">Upload private.key</label>
+        <input id="vonageKey" type="file" hidden>
+      </div>
     </section>
 
     <section class="tab" id="tab-drivers">
@@ -264,7 +270,8 @@
     $('mode').innerHTML = s.status.dryRun ? '<span class="pill dry">Dry run</span>' : s.paused ? '<span class="pill paused">Paused</span>' : '<span class="pill live">Live</span>';
 
     const missing = [];
-    if (!s.status.dryRun && !s.status.calls) missing.push(`${s.status.provider} details: ${(s.status.missing || []).join(', ')} (calls cannot go out)`);
+    if (!s.status.dryRun && (!s.status.calls || (s.status.missing || []).length)) missing.push(`${s.status.provider} details: ${(s.status.missing || []).join(', ')} (calls cannot go out)`);
+    if (s.status.storageWarning) missing.push(s.status.storageWarning);
     if (!s.status.dryRun && !s.status.publicUrl) missing.push('PUBLIC_URL (calls cannot hear keypresses)');
     if (!s.status.owner) missing.push('OWNER_PHONE (you will not get alert calls)');
     $('setup').innerHTML = missing.length ? `<div class="banner"><b>Server setup not finished</b>${missing.map(esc).join('<br>')}</div>` : '';
@@ -300,6 +307,15 @@
              : t ? `<button class="small" data-offtmr="${d.id}">Off tomorrow</button>` : ''}
       </div>`;
     }).join('')}<div class="hint">For other dates or different times, use the Changes tab.</div></div>`;
+
+    const isVonage = s.status.provider === 'Vonage';
+    $('vonageCard').hidden = !isVonage;
+    if (isVonage) {
+      const needKey = (s.status.missing || []).some((m) => /private\.key/.test(m));
+      $('vonageKeyStatus').textContent = needKey
+        ? 'Not uploaded yet. Pick the private.key file Vonage downloaded when you created the app.'
+        : 'Uploaded ✓ (upload again only if you made a new key)';
+    }
 
     $('pauseBtn').textContent = s.paused ? 'Resume' : 'Pause';
     $('pauseBtn').className = s.paused ? 'primary' : '';
@@ -449,6 +465,15 @@
       act(() => api('POST', '/test-owner'), 'Calling your phone');
     }
   });
+
+  $('vonageKey').onchange = async () => {
+    const f = $('vonageKey').files[0];
+    if (!f) return;
+    if (f.size > 20000) { toast("That file is too big to be a private.key", true); return; }
+    const pem = await f.text();
+    $('vonageKey').value = '';
+    act(() => api('POST', '/vonage-key', { pem }), 'Key saved');
+  };
 
   $('loginForm').onsubmit = (ev) => {
     ev.preventDefault();
