@@ -59,9 +59,9 @@ function load(env = process.env) {
     provider,
     providerName: NAMES[provider],
     // The number your drivers see calling them
-    // (Vonage trial: 123456789 is Vonage's test caller ID, which can only call your own number)
+    // (Vonage trial: 12345678901 is Vonage's test caller ID, which can only call your own number)
     callerId:
-      (provider === 'telnyx' ? env.TELNYX_FROM_NUMBER : provider === 'vonage' ? env.VONAGE_FROM_NUMBER || '123456789' : env.TWILIO_FROM_NUMBER) || '',
+      (provider === 'telnyx' ? env.TELNYX_FROM_NUMBER : provider === 'vonage' ? env.VONAGE_FROM_NUMBER || '12345678901' : env.TWILIO_FROM_NUMBER) || '',
     ringSeconds: num(env.RING_SECONDS, 40),
     // Let drivers answer by speaking as well as pressing keys
     speechInput: bool(env.SPEECH_INPUT, provider === 'twilio'),

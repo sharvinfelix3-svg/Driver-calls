@@ -46,7 +46,7 @@ test('picks Vonage from its app ID; trial caller ID; keypad only', () => {
   const c = load({ VONAGE_APPLICATION_ID: 'a' });
   assert.equal(c.provider, 'vonage');
   assert.equal(c.providerName, 'Vonage');
-  assert.equal(c.callerId, '123456789');
+  assert.equal(c.callerId, '12345678901');
   assert.equal(c.speechInput, false);
   assert.equal(load({ VONAGE_APPLICATION_ID: 'a', VONAGE_FROM_NUMBER: '+12015550123' }).callerId, '+12015550123');
   assert.equal(load({ VONAGE_APPLICATION_ID: 'a', TELNYX_API_KEY: 'k' }).provider, 'telnyx');
@@ -128,7 +128,7 @@ test('Vonage: full wake-up call — silence, then key press, then call ends', as
     assert.equal(url, 'https://api.nexmo.com/v1/calls');
     assert.match(opts.headers.authorization, /^Bearer [\w-]+\.[\w-]+\.[\w-]+$/);
     assert.deepEqual(body.to, [{ type: 'phone', number: '60123456789' }]);
-    assert.deepEqual(body.from, { type: 'phone', number: '123456789' });
+    assert.deepEqual(body.from, { type: 'phone', number: '12345678901' });
     assert.ok(body.event_url[0].startsWith(`${srv.base}/voice/status?cid=`));
     assert.match(body.ncco[0].text, /Selamat pagi Ali/);
     assert.equal(body.ncco[0].language, 'ms-MY');
@@ -192,7 +192,7 @@ test('Vonage errors are explained', async () => {
   const fail = (status, text) =>
     P.vonageProvider({ appId: 'a', privateKey: PEM }, async () => ({ ok: false, status, text: async () => text })).calls.create({
       to: '+60',
-      from: '123456789',
+      from: '12345678901',
       twiml: '<Response><Say>x</Say></Response>',
       statusCallback: 'https://x',
     });
