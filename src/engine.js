@@ -6,6 +6,7 @@ const { localParts, toMinutes, isHHMM, isDate, addDays } = require('./time');
 const { normalizePhone } = require('./phone');
 const M = require('./messages');
 const { classifyOutAnswer } = require('./classify');
+const { missingProviderSettings } = require('./providers');
 
 const { VoiceResponse } = twilio.twiml;
 const BUSY = new Set(['calling', 'scheduled']);
@@ -42,7 +43,8 @@ function createEngine({ config, store, client = null, now = () => Date.now(), cl
 
   const driverById = (id) => db().drivers.find((d) => d.id === id);
   const langOf = (driver) => (driver && driver.lang === 'en' ? 'en' : 'ms');
-  const hookUrl = (path, cid) => `${config.publicUrl}${path}?cid=${cid}`;
+  const hookUrl = (path, cid) =>
+    `${config.publicUrl}/voice/${path}?cid=${cid}${config.webhookKey ? `&key=${encodeURIComponent(config.webhookKey)}` : ''}`;
 
   /** The driver's times for a date, or null if not working that day. */
   function scheduleFor(driver, date, weekday = weekdayOf(date)) {
@@ -76,23 +78,33 @@ function createEngine({ config, store, client = null, now = () => Date.now(), cl
   // ---------- placing calls ----------
 
   async function placeCall(to, twiml, cid) {
+    // Keep the script so the calling service can fetch it from /voice/twiml (Telnyx does this)
+    if (db().calls[cid]) db().calls[cid].twiml = twiml;
     if (config.dryRun) {
       log.info(`\n[DRY RUN] Calling ${to}\n  "${sayText(twiml)}"\n  (pretending nobody answered)\n`);
       const t = setTimeout(() => handleStatus(cid, 'no-answer'), 1500);
       if (t.unref) t.unref();
       return { sid: 'DRY-RUN' };
     }
-    if (!client) throw new Error('Twilio is not set up (TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM_NUMBER)');
+    if (!client) throw new Error(`${config.providerName} is not set up yet, so no call was made`);
     if (!config.publicUrl) throw new Error('PUBLIC_URL is not set, so calls cannot hear keypresses');
     return client.calls.create({
       to,
-      from: config.twilio.from,
+      from: config.callerId,
       twiml,
-      timeout: config.twilio.ringSeconds,
-      statusCallback: hookUrl('/twilio/status', cid),
-      statusCallbackMethod: 'POST',
-      statusCallbackEvent: ['completed'],
+      url: hookUrl('twiml', cid),
+      timeout: config.ringSeconds,
+      statusCallback: hookUrl('status', cid),
     });
+  }
+
+  /** The script for a call, when the calling service asks for it. */
+  function getTwiml(cid) {
+    const call = db().calls[cid];
+    if (call && call.twiml) return call.twiml;
+    const r = new VoiceResponse();
+    r.hangup();
+    return r.toString();
   }
 
   function driverCallTwiml(driver, kind, cid, { test = false } = {}) {
@@ -100,7 +112,7 @@ function createEngine({ config, store, client = null, now = () => Date.now(), cl
     const S = M.driver[lang];
     const r = new VoiceResponse();
     const intro = kind === 'wake' ? S.wakeIntro(driver, lp().hhmm, config.companyName) : S.outIntro(driver, config.companyName);
-    const prompt = kind === 'wake' ? S.wakePrompt : S.outPrompt;
+    const prompt = kind === 'wake' ? S.wakePrompt(config.speechInput) : S.outPrompt;
     for (let i = 0; i < 2; i++) {
       const g = r.gather(gatherOptions(lang, kind, cid));
       if (i === 0 && test) voiceSay(g, lang, S.testNote);
@@ -113,15 +125,14 @@ function createEngine({ config, store, client = null, now = () => Date.now(), cl
   }
 
   function gatherOptions(lang, kind, cid) {
+    const keys = { input: 'dtmf', numDigits: 1, timeout: 7, action: hookUrl('gather', cid), method: 'POST' };
+    if (!config.speechInput) return keys;
     return {
+      ...keys,
       input: 'dtmf speech',
-      numDigits: 1,
-      timeout: 7,
       speechTimeout: 'auto',
       language: config.voices[lang].speech,
       hints: M.hints[lang][kind],
-      action: hookUrl('/twilio/gather', cid),
-      method: 'POST',
     };
   }
 
@@ -163,7 +174,7 @@ function createEngine({ config, store, client = null, now = () => Date.now(), cl
       const p = lp(t);
       const d = db();
 
-      // Calls Twilio never reported back on count as unanswered
+      // Calls the service never reported back on count as unanswered
       for (const call of Object.values(d.calls)) {
         if (!call.ended && t - call.createdAt > rules.callStaleMinutes * 60000) handleStatus(call.cid, 'no-status');
       }
@@ -226,9 +237,9 @@ function createEngine({ config, store, client = null, now = () => Date.now(), cl
     d.alerts = d.alerts.filter((a) => BUSY.has(a.state) || ++finished <= 30);
   }
 
-  // ---------- what Twilio tells us ----------
+  // ---------- what the calling service tells us ----------
 
-  /** Twilio sends what the person pressed or said. Returns TwiML for what to say next. */
+  /** The calling service sends what the person pressed or said. Returns TwiML for what to say next. */
   async function handleGather(cid, params = {}) {
     const digits = params.Digits || '';
     const speech = String(params.SpeechResult || '').trim().slice(0, 120);
@@ -341,7 +352,7 @@ function createEngine({ config, store, client = null, now = () => Date.now(), cl
     return r.toString();
   }
 
-  /** Twilio says a call has ended. */
+  /** The calling service says a call has ended. */
   function handleStatus(cid, status) {
     const call = db().calls[cid];
     if (!call || call.ended) return;
@@ -442,7 +453,7 @@ function createEngine({ config, store, client = null, now = () => Date.now(), cl
     const r = new VoiceResponse();
     const text = `${O.open} ${alert.messages.join(' ')}`;
     for (let i = 0; i < 2; i++) {
-      const g = r.gather({ input: 'dtmf', numDigits: 1, timeout: 6, action: hookUrl('/twilio/gather', cid), method: 'POST' });
+      const g = r.gather({ input: 'dtmf', numDigits: 1, timeout: 6, action: hookUrl('gather', cid), method: 'POST' });
       voiceSay(g, lang, i === 0 ? text : `${M.driver[lang].repeat} ${text}`);
       voiceSay(g, lang, O.ackPrompt);
     }
@@ -627,7 +638,9 @@ function createEngine({ config, store, client = null, now = () => Date.now(), cl
       alerts: d.alerts.slice(0, 10),
       log: d.log.slice(0, 80),
       status: {
-        twilio: !!client,
+        provider: config.providerName,
+        calls: !!client,
+        missing: missingProviderSettings(config),
         publicUrl: !!config.publicUrl,
         owner: !!config.owner.phone,
         ai: !!config.ai.apiKey,
@@ -654,6 +667,7 @@ function createEngine({ config, store, client = null, now = () => Date.now(), cl
     testOwnerCall,
     snapshot,
     scheduleFor,
+    getTwiml,
     _driverCallTwiml: driverCallTwiml,
     _ownerTwiml: ownerTwiml,
   };

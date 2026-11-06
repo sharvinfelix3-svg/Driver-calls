@@ -1,64 +1,72 @@
 # Going live
 
-About 30 minutes. You need: your Twilio account (the same one as the aircooler agent is fine), a host that stays on 24/7, and your drivers' numbers.
+You need: a calling service (**Telnyx**, or Twilio), a host that stays on 24/7 (**Railway**), and your drivers' numbers. All of it can be done from a phone browser.
 
-> **Important:** the host must never sleep. Free plans that sleep when nobody visits (e.g. Render free) will miss 5am calls. Railway with a paid plan, or any always-on server, is fine.
+> **Important:** the host must never sleep. Free plans that sleep when nobody visits will miss 5am calls. Railway on the Hobby plan is fine.
 
-## 1. Twilio
+## 1. Railway (host)
 
-1. Log in at console.twilio.com.
-2. **Allow calls to Malaysia:** Voice → Settings → Geo permissions → tick **Malaysia** → Save.
-3. Copy your **Account SID** and **Auth Token** (home page of the console).
-4. Use the phone number you already have, or buy one (any country with voice works for calling out).
-5. If your account is still a **trial**, upgrade it. Trial accounts play a "trial account" message before every call and can only call numbers you've verified.
-
-Quick check from your computer (after filling in `.env`):
-
-```bash
-npm install
-npm run test-call            # calls OWNER_PHONE
-npm run test-call -- 0123456789
-```
-
-If you hear the Malay voice, Twilio is ready.
-
-## 2. Put it online (Railway)
-
-1. Create a new **service** from this folder (connect a GitHub repo, or use `railway up`). You can add it to the same project as the aircooler agent as a separate service.
-2. Add a **Volume** to the service with mount path **`/data`**. This keeps the drivers list and today's progress safe through restarts.
-3. Under **Settings → Networking**, generate a public domain, e.g. `driver-calls.up.railway.app`.
-4. Under **Variables**, add:
+1. railway.com → **Login with GitHub** → **New Project** → **Deploy from GitHub repo** → pick this repo.
+2. Add a **Volume** to the service with mount path **`/data`**. This keeps drivers and today's progress safe through restarts.
+3. **Settings → Networking → Generate Domain**, e.g. `driver-calls-production.up.railway.app`.
+4. **Variables**:
 
 | Variable | Value |
 |---|---|
-| `PUBLIC_URL` | `https://driver-calls.up.railway.app` (your domain, with https, no slash at the end) |
+| `PUBLIC_URL` | `https://your-domain.up.railway.app` (https, no slash at the end) |
 | `ADMIN_TOKEN` | a long password you make up |
 | `DATA_DIR` | `/data` |
-| `TWILIO_ACCOUNT_SID` | from step 1 |
-| `TWILIO_AUTH_TOKEN` | from step 1 |
-| `TWILIO_FROM_NUMBER` | your Twilio number, e.g. `+12025550123` |
-| `OWNER_PHONE` | your mobile, e.g. `0146472974` or `+60146472974` |
-| `ANTHROPIC_API_KEY` | optional, the same key as the aircooler agent |
+| `OWNER_PHONE` | your mobile, e.g. `0146472974` |
 
-Everything else has sensible defaults (see `.env.example`).
+5. Switch to the **Hobby** plan before going live (the trial credit runs out).
 
-5. Deploy. The logs should say `Driver call system running` with nothing listed under "Not set yet".
+## 2. Telnyx (calling service)
 
-## 3. Set up on your phone
+Menu names in Telnyx may differ slightly. If a screen looks different, send a screenshot.
 
-1. Open `https://your-domain/admin` and sign in with `ADMIN_TOKEN`.
-2. Add it to your home screen (Share → Add to Home Screen) so it opens like an app.
-3. **Controls → Test call to my phone.** Press 1 when it rings. The log should say "You confirmed the alert call".
-4. **Drivers → + Add driver** for each driver: name (the call says it out loud, so use what he's called), number, language, wake-up time, check time, working days.
-5. Press **Test wake-up call** and **Test check call** for each driver while he's with you. Test calls never change today's progress and never call you.
+1. **Sign up** at telnyx.com and confirm your email.
+2. **Billing**: add your card and top up a small amount (e.g. US$10).
+3. **Verification**: Account Settings → **Verifications** (or **Account Levels**). Complete **Level 2 / Verified**. This is what allows calls to Malaysia. Review can take up to 48 hours.
+4. **Outbound Voice Profile**: Voice → **Outbound Voice Profiles** → **Add**. Name it `Driver calls`, add **Malaysia** to the allowed destinations, then save.
+5. **TeXML Application**: Voice → Programmable Voice → **TeXML Applications** → **Add new app**.
+   - Name: `Driver calls`
+   - Webhook URL ("Send a TeXML Webhook to the URL"): `https://your-domain.up.railway.app/voice/inbound`
+   - Voice method: **POST**
+   - Outbound: choose the `Driver calls` Outbound Voice Profile
+   - Save, then copy the app's **ID**.
+6. **Buy a number**: Numbers → **Search & Buy**. Pick any country with **Voice** (a US number works for calling Malaysia) and assign it to the `Driver calls` app.
+7. **API key**: Account Settings → **Keys & Credentials** → **API Keys** → **Create**. Copy it. It's shown once, and you shouldn't share it.
+8. Back in **Railway → Variables**, add:
+
+| Variable | Value |
+|---|---|
+| `TELNYX_API_KEY` | the key from step 7 |
+| `TELNYX_APP_ID` | the app ID from step 5 |
+| `TELNYX_FROM_NUMBER` | the number from step 6, in + format, e.g. `+12025550123` |
+
+Railway redeploys by itself. The phone page's "Server setup not finished" box should disappear.
+
+<details>
+<summary>Using Twilio instead</summary>
+
+Set `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` and `TWILIO_FROM_NUMBER` instead of the Telnyx ones. Turn on Malaysia in Twilio → Voice → Settings → Geo permissions.
+</details>
+
+## 3. Test on your phone
+
+1. Open `https://your-domain/admin` and sign in with `ADMIN_TOKEN`. Add it to your home screen.
+2. **Controls → Test call to my phone.** Press 1 when it rings. The Log tab should say "You confirmed the alert call".
+3. **Drivers → + Add driver** for each driver.
+4. Press **Test wake-up call** and **Test check call** for each driver while he's with you. Test calls never change today's progress and never call you.
+5. Tap **Resume**.
 
 ## 4. Tell your drivers
 
-Send them the Twilio number and ask them to **save it as a contact** (e.g. "Wake-up Call PVL") so their phone doesn't block it as spam. Then WhatsApp them something like:
+Ask them to **save the calling number as a contact** (e.g. "Wake-up Call PVL") so their phone doesn't block it as spam. Then WhatsApp them:
 
 > Mulai esok, sistem akan telefon untuk kejut bangun dan tanya dah keluar ke belum. Nombor: +1 xxx xxx xxxx (sila save).
 > • Panggilan bangun: angkat dan tekan mana-mana nombor.
-> • Panggilan "dah keluar?": tekan 1 = dah keluar, 2 = belum, 3 = ada masalah. Boleh cakap juga.
+> • Panggilan "dah keluar?": tekan 1 = dah keluar, 2 = belum, 3 = ada masalah.
 > Kalau tak angkat 3 kali, boss akan dapat panggilan.
 
 ## Day-to-day
@@ -70,10 +78,14 @@ Send them the Twilio number and ask them to **save it as a contact** (e.g. "Wake
 
 ## If something's wrong
 
+Check the **Log** tab first, then Railway → Driver-calls → **Deployments → View logs**. Errors from Telnyx come with a plain-English hint.
+
 | Problem | Fix |
 |---|---|
-| Phone page says "Server setup not finished" | A variable is missing; it names which. |
-| Calls go out but keypresses do nothing | `PUBLIC_URL` must be exactly your https domain. The logs will say "bad signature" if it doesn't match. |
-| "Twilio said: ... permission" in logs | Turn on Malaysia in Twilio Geo permissions. |
-| Calls stopped after a redeploy and drivers vanished | The volume isn't mounted at `/data`, or `DATA_DIR` isn't `/data`. |
-| Log says "Skipped ... system was off" | The server was down at call time for more than 30 minutes. Check your host. |
+| "Server setup not finished" | It names the missing variable. |
+| Log says Telnyx "has not allowed this call" | Finish Level 2 verification, and allow Malaysia in the Outbound Voice Profile. |
+| Log says "could not find the TeXML application" | Check `TELNYX_APP_ID`. If Telnyx support says to use the newer call address, also set `TELNYX_ACCOUNT_SID`. |
+| Phone rings but it's silent or hangs up at once | `PUBLIC_URL` must be exactly your https domain. |
+| Malay voice sounds wrong | Set `VOICE_MS=Azure.ms-MY-OsmanNeural` (male voice). |
+| Drivers vanished after a redeploy | The volume isn't mounted at `/data`, or `DATA_DIR` isn't `/data`. |
+| Log says "Skipped ... system was off" | The server was down at call time for more than 30 minutes. Check Railway. |

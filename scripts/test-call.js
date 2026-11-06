@@ -1,4 +1,4 @@
-// Quick check that Twilio and the Malay voice work, before anything else.
+// Quick check that Twilio and the Malay voice work (Twilio only).
 // Usage:  npm run test-call              (calls OWNER_PHONE)
 //         npm run test-call -- 0123456789
 const twilio = require('twilio');
@@ -7,6 +7,10 @@ const { normalizePhone } = require('../src/phone');
 const M = require('../src/messages');
 
 const config = load();
+if (config.provider === 'telnyx') {
+  console.log('With Telnyx, use the "Test call to my phone" button on your phone page instead (it needs the server running online).');
+  process.exit(0);
+}
 const to = normalizePhone(process.argv[2] || config.owner.phone);
 const { accountSid, authToken, from } = config.twilio;
 

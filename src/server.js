@@ -1,4 +1,4 @@
-// Web server: Twilio talks to /twilio/*, your phone page talks to /api/*.
+// Web server: the calling service talks to /voice/*, your phone page talks to /api/*.
 const path = require('path');
 const crypto = require('crypto');
 const express = require('express');
@@ -6,12 +6,7 @@ const twilio = require('twilio');
 const { load } = require('./config');
 const { createStore } = require('./store');
 const { createEngine } = require('./engine');
-
-function makeTwilioClient(config) {
-  const { accountSid, authToken, from } = config.twilio;
-  if (!accountSid || !authToken || !from) return null;
-  return twilio(accountSid, authToken);
-}
+const { makeProvider, missingProviderSettings } = require('./providers');
 
 function createApp({ config, engine, log = console }) {
   const app = express();
@@ -22,35 +17,64 @@ function createApp({ config, engine, log = console }) {
   app.get('/', (req, res) => res.redirect('/admin'));
   app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'admin.html')));
 
-  // ---------- Twilio ----------
-  const tw = express.Router();
-  tw.use(express.urlencoded({ extended: false }));
-  tw.use((req, res, next) => {
-    if (!config.validateTwilioSignature || config.dryRun) return next();
-    const signature = req.get('X-Twilio-Signature') || '';
-    const url = config.publicUrl + req.originalUrl;
-    if (config.twilio.authToken && twilio.validateRequest(config.twilio.authToken, signature, url, req.body || {})) return next();
-    log.warn(`[twilio] Rejected a request with a bad signature (${req.originalUrl}). Check PUBLIC_URL matches your real address.`);
-    res.status(403).send('Forbidden');
+  // ---------- the calling service (Twilio or Telnyx) ----------
+  const HANGUP = '<?xml version="1.0" encoding="UTF-8"?><Response><Hangup/></Response>';
+  const voice = express.Router();
+  voice.use(express.urlencoded({ extended: false }));
+  voice.use(express.json({ limit: '50kb' }));
+  const params = (req) => ({ ...req.query, ...(req.body && typeof req.body === 'object' ? req.body : {}) });
+
+  // Someone rings your calling number back: a short message, then hang up.
+  voice.all('/inbound', (req, res) => {
+    const v = config.voices.ms;
+    const r = new twilio.twiml.VoiceResponse();
+    r.say({ voice: v.voice, language: v.language }, `Ini nombor sistem panggilan pemandu ${config.companyName}. Untuk sebarang hal, sila telefon boss terus. Terima kasih.`);
+    r.hangup();
+    res.type('text/xml').send(r.toString());
   });
-  tw.post('/gather', async (req, res) => {
+
+  // Everything else must carry the secret key, so nobody can fake a driver's answer.
+  voice.use((req, res, next) => {
+    if (config.webhookKey) {
+      const got = Buffer.from(String(req.query.key || ''));
+      const want = Buffer.from(config.webhookKey);
+      if (got.length !== want.length || !crypto.timingSafeEqual(got, want)) {
+        log.warn(`[voice] Rejected a request without the right key (${req.path}).`);
+        return res.status(403).send('Forbidden');
+      }
+    }
+    if (config.provider === 'twilio' && config.validateTwilioSignature && !config.dryRun) {
+      const signature = req.get('X-Twilio-Signature') || '';
+      const url = config.publicUrl + req.originalUrl;
+      if (!config.twilio.authToken || !twilio.validateRequest(config.twilio.authToken, signature, url, req.body || {})) {
+        log.warn(`[voice] Rejected a request with a bad Twilio signature (${req.path}). Check PUBLIC_URL matches your real address.`);
+        return res.status(403).send('Forbidden');
+      }
+    }
+    next();
+  });
+  voice.all('/twiml', (req, res) => {
+    res.type('text/xml').send(engine.getTwiml(String(req.query.cid || '')));
+  });
+  voice.all('/gather', async (req, res) => {
     try {
-      const xml = await engine.handleGather(String(req.query.cid || ''), req.body || {});
+      const xml = await engine.handleGather(String(req.query.cid || ''), params(req));
       res.type('text/xml').send(xml);
     } catch (e) {
-      log.error(`[twilio] gather failed: ${e.stack || e.message}`);
-      res.type('text/xml').send('<?xml version="1.0" encoding="UTF-8"?><Response><Hangup/></Response>');
+      log.error(`[voice] gather failed: ${e.stack || e.message}`);
+      res.type('text/xml').send(HANGUP);
     }
   });
-  tw.post('/status', (req, res) => {
+  voice.all('/status', (req, res) => {
     try {
-      engine.handleStatus(String(req.query.cid || ''), (req.body && req.body.CallStatus) || 'completed');
+      const p = params(req);
+      engine.handleStatus(String(req.query.cid || ''), p.CallStatus || p.call_status || 'completed');
     } catch (e) {
-      log.error(`[twilio] status failed: ${e.stack || e.message}`);
+      log.error(`[voice] status failed: ${e.stack || e.message}`);
     }
     res.sendStatus(204);
   });
-  app.use('/twilio', tw);
+  app.use('/voice', voice);
 
   // ---------- your phone page ----------
   const api = express.Router();
@@ -92,16 +116,16 @@ function createApp({ config, engine, log = console }) {
 function start() {
   const config = load();
   const store = createStore(path.resolve(config.dataDir, 'db.json'));
-  const client = config.dryRun ? null : makeTwilioClient(config);
+  const client = makeProvider(config);
   const engine = createEngine({ config, store, client });
   const app = createApp({ config, engine });
 
   app.listen(config.port, () => {
-    console.log(`Driver call system running on port ${config.port}${config.dryRun ? ' (DRY RUN: no real calls)' : ''}`);
+    console.log(`Driver call system running on port ${config.port} using ${config.providerName}${config.dryRun ? ' (DRY RUN: no real calls)' : ''}`);
     console.log(`Phone page: ${config.publicUrl || `http://localhost:${config.port}`}/admin`);
     const missing = [];
     if (!config.adminToken) missing.push('ADMIN_TOKEN (password for the phone page)');
-    if (!config.dryRun && !client) missing.push('TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN / TWILIO_FROM_NUMBER');
+    if (!config.dryRun && !client) missing.push(`${config.providerName}: ${missingProviderSettings(config).join(', ')}`);
     if (!config.dryRun && !config.publicUrl) missing.push('PUBLIC_URL');
     if (!config.owner.phone) missing.push('OWNER_PHONE (your number, for alerts)');
     if (missing.length) console.warn(`Not set yet:\n  - ${missing.join('\n  - ')}`);
@@ -114,4 +138,4 @@ function start() {
 
 if (require.main === module) start();
 
-module.exports = { createApp, makeTwilioClient };
+module.exports = { createApp };

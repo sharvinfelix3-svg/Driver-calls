@@ -264,7 +264,7 @@
     $('mode').innerHTML = s.status.dryRun ? '<span class="pill dry">Dry run</span>' : s.paused ? '<span class="pill paused">Paused</span>' : '<span class="pill live">Live</span>';
 
     const missing = [];
-    if (!s.status.dryRun && !s.status.twilio) missing.push('Twilio details (calls cannot go out)');
+    if (!s.status.dryRun && !s.status.calls) missing.push(`${s.status.provider} details: ${(s.status.missing || []).join(', ')} (calls cannot go out)`);
     if (!s.status.dryRun && !s.status.publicUrl) missing.push('PUBLIC_URL (calls cannot hear keypresses)');
     if (!s.status.owner) missing.push('OWNER_PHONE (you will not get alert calls)');
     $('setup').innerHTML = missing.length ? `<div class="banner"><b>Server setup not finished</b>${missing.map(esc).join('<br>')}</div>` : '';

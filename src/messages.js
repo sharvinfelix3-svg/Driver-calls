@@ -7,7 +7,7 @@ const driver = {
   ms: {
     wakeIntro: (d, nowHHMM, company) =>
       `${greeting(nowHHMM, 'ms')} ${d.name}. Ini panggilan bangun tidur dari ${company}. Sekarang ${sayTime(nowHHMM, 'ms')}.`,
-    wakePrompt: 'Tekan mana-mana nombor, atau sebut, dah bangun.',
+    wakePrompt: (speech) => (speech ? 'Tekan mana-mana nombor, atau sebut, dah bangun.' : 'Tekan mana-mana nombor untuk sahkan awak dah bangun.'),
     wakeAck: (outTime) =>
       `Bagus, terima kasih. ${outTime ? `Ingat, keluar ${sayTime(outTime, 'ms')}. ` : ''}Selamat memandu.`,
 
@@ -27,7 +27,7 @@ const driver = {
   en: {
     wakeIntro: (d, nowHHMM, company) =>
       `${greeting(nowHHMM, 'en')} ${d.name}. This is your wake-up call from ${company}. The time now is ${sayTime(nowHHMM, 'en')}.`,
-    wakePrompt: "Press any key, or say, I'm awake.",
+    wakePrompt: (speech) => (speech ? "Press any key, or say, I'm awake." : 'Press any key to confirm you are awake.'),
     wakeAck: (outTime) => `Great, thank you. ${outTime ? `Remember, leave at ${sayTime(outTime, 'en')}. ` : ''}Drive safe.`,
 
     outIntro: (d, company) => `Hello ${d.name}, this is ${company}. Have you left yet?`,

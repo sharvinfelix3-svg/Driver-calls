@@ -1,26 +1,61 @@
 // All settings come from environment variables (.env on your computer,
 // or the "Variables" screen on your host). See .env.example.
 require('dotenv').config();
+const crypto = require('crypto');
 
 const num = (v, d) => (v === undefined || v === '' || Number.isNaN(Number(v)) ? d : Number(v));
 const bool = (v, d) => (v === undefined || v === '' ? d : /^(1|true|yes|on)$/i.test(String(v)));
 
+// Default voices for each calling service
+const VOICE_DEFAULTS = {
+  twilio: { ms: 'Google.ms-MY-Standard-A', en: 'Google.en-US-Standard-C' },
+  telnyx: { ms: 'Azure.ms-MY-YasminNeural', en: 'Azure.en-US-JennyNeural' },
+};
+
 function load(env = process.env) {
+  // Which calling service to use. Picks Telnyx automatically if its key is set.
+  const provider = /^telnyx$/i.test(env.CALL_PROVIDER || '')
+    ? 'telnyx'
+    : /^twilio$/i.test(env.CALL_PROVIDER || '')
+      ? 'twilio'
+      : env.TELNYX_API_KEY
+        ? 'telnyx'
+        : 'twilio';
+  const adminToken = env.ADMIN_TOKEN || '';
+  // Secret added to every link the calling service calls back on, so nobody else can fake answers.
+  const webhookKey =
+    env.WEBHOOK_KEY || (adminToken ? crypto.createHmac('sha256', adminToken).update('driver-calls-webhook').digest('hex').slice(0, 24) : '');
+
   return {
     port: num(env.PORT, 3000),
     publicUrl: String(env.PUBLIC_URL || '').trim().replace(/\/+$/, ''),
-    adminToken: env.ADMIN_TOKEN || '',
+    adminToken,
+    webhookKey,
     dataDir: env.DATA_DIR || './data',
     timezone: env.TIMEZONE || 'Asia/Kuala_Lumpur',
     companyName: env.COMPANY_NAME || 'Pacific Venture Logistics',
     dryRun: bool(env.DRY_RUN, false),
     validateTwilioSignature: bool(env.VALIDATE_TWILIO_SIGNATURE, true),
 
+    provider,
+    providerName: provider === 'telnyx' ? 'Telnyx' : 'Twilio',
+    // The number your drivers see calling them
+    callerId: (provider === 'telnyx' ? env.TELNYX_FROM_NUMBER : env.TWILIO_FROM_NUMBER) || '',
+    ringSeconds: num(env.RING_SECONDS, 40),
+    // Let drivers answer by speaking as well as pressing keys
+    speechInput: bool(env.SPEECH_INPUT, provider === 'twilio'),
+
     twilio: {
       accountSid: env.TWILIO_ACCOUNT_SID || '',
       authToken: env.TWILIO_AUTH_TOKEN || '',
       from: env.TWILIO_FROM_NUMBER || '',
-      ringSeconds: num(env.RING_SECONDS, 40),
+    },
+
+    telnyx: {
+      apiKey: env.TELNYX_API_KEY || '',
+      appId: env.TELNYX_APP_ID || '',
+      accountSid: env.TELNYX_ACCOUNT_SID || '',
+      from: env.TELNYX_FROM_NUMBER || '',
     },
 
     owner: {
@@ -29,8 +64,8 @@ function load(env = process.env) {
     },
 
     voices: {
-      ms: { voice: env.VOICE_MS || 'Google.ms-MY-Standard-A', language: 'ms-MY', speech: env.SPEECH_LANG_MS || 'ms-MY' },
-      en: { voice: env.VOICE_EN || 'Google.en-US-Standard-C', language: 'en-US', speech: env.SPEECH_LANG_EN || 'en-US' },
+      ms: { voice: env.VOICE_MS || VOICE_DEFAULTS[provider].ms, language: 'ms-MY', speech: env.SPEECH_LANG_MS || 'ms-MY' },
+      en: { voice: env.VOICE_EN || VOICE_DEFAULTS[provider].en, language: 'en-US', speech: env.SPEECH_LANG_EN || 'en-US' },
     },
 
     rules: {
@@ -47,7 +82,7 @@ function load(env = process.env) {
       // Calls to the boss
       ownerRetries: num(env.OWNER_CALL_RETRIES, 2),
       ownerRetryMinutes: num(env.OWNER_RETRY_MINUTES, 3),
-      // If Twilio never reports a call ended, treat it as unanswered after this long
+      // If the calling service never reports a call ended, treat it as unanswered after this long
       callStaleMinutes: num(env.CALL_STALE_MINUTES, 4),
     },
 
