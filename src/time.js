@@ -55,6 +55,20 @@ function addDays(date, n) {
   return d.toISOString().slice(0, 10);
 }
 
+/** '2026-01-31' + 1 month -> '2026-02-28' (stays inside the shorter month) */
+function addMonths(date, n) {
+  const [y, m, d] = date.split('-').map(Number);
+  const first = new Date(Date.UTC(y, m - 1 + n, 1));
+  const lastDay = new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth() + 1, 0)).getUTCDate();
+  first.setUTCDate(Math.min(d, lastDay));
+  return first.toISOString().slice(0, 10);
+}
+
+/** Whole days from one date to another ('2026-11-09' -> '2026-11-16' = 7) */
+function daysBetween(from, to) {
+  return Math.round((Date.parse(to + 'T00:00:00Z') - Date.parse(from + 'T00:00:00Z')) / 86400000);
+}
+
 // ---------- saying times and numbers out loud ----------
 
 const MS_UNITS = ['kosong', 'satu', 'dua', 'tiga', 'empat', 'lima', 'enam', 'tujuh', 'lapan', 'sembilan', 'sepuluh', 'sebelas'];
@@ -107,4 +121,4 @@ function sayCount(n, lang) {
   return lang === 'en' ? String(n) : msNumber(n);
 }
 
-module.exports = { localParts, isHHMM, toMinutes, isDate, addDays, msNumber, sayTime, greeting, sayCount };
+module.exports = { localParts, isHHMM, toMinutes, isDate, addDays, addMonths, daysBetween, msNumber, sayTime, greeting, sayCount };

@@ -57,6 +57,9 @@
   .hint { font-size: 13px; color: var(--muted); margin-top: 4px; }
   .banner { border-radius: 12px; padding: 12px 14px; margin: 12px 0; font-size: 14px; background: var(--warn-bg); color: var(--warn); }
   .banner b { display: block; margin-bottom: 4px; }
+  .banner.bad { background: var(--bad-bg); color: var(--bad); }
+  .banner.info { background: var(--info-bg); color: var(--info); }
+  .banner a { color: inherit; font-weight: 700; }
   nav { position: fixed; left: 0; right: 0; bottom: 0; background: var(--card); border-top: 1px solid var(--line); display: flex; padding-bottom: env(safe-area-inset-bottom); }
   nav button { flex: 1; border: 0; border-radius: 0; background: none; padding: 12px 4px 14px; font-size: 13px; color: var(--muted); }
   nav button.on { color: var(--ink); box-shadow: inset 0 3px 0 var(--accent); }
@@ -93,6 +96,7 @@
   </section>
 
   <div id="app" hidden>
+    <div id="licence"></div>
     <div id="setup"></div>
 
     <section class="tab on" id="tab-today">
@@ -114,6 +118,12 @@
         <div class="muted" id="vonageKeyStatus"></div>
         <label for="vonageKey" class="btn" style="display:inline-block;margin-top:12px;font-weight:600">Upload private.key</label>
         <input id="vonageKey" type="file" hidden>
+      </div>
+      <div class="card">
+        <div class="row">
+          <div><div class="name" style="font-size:16px">Subscription</div><div class="muted" id="licenceStatus"></div></div>
+          <button type="button" class="small" id="sellerBtn">Seller</button>
+        </div>
       </div>
     </section>
 
@@ -186,6 +196,34 @@
       <button class="primary" type="submit" value="save">Save</button>
       <button type="button" id="dCancel">Cancel</button>
       <button type="button" class="danger" id="dDelete" style="margin-left:auto">Delete</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="sellerDialog">
+  <form id="sellerForm" method="dialog">
+    <h3>Seller settings</h3>
+    <div class="muted" id="sNow"></div>
+    <label for="sPw">Seller password</label>
+    <input id="sPw" type="password" autocomplete="off">
+    <div class="hint">The SELLER_TOKEN you set on Railway. Never give this one to customers.</div>
+    <label>Free trial (starts today)</label>
+    <div class="btns" style="margin-top:4px">
+      <button type="button" data-sell="trial" data-days="7">7 days free</button>
+      <button type="button" data-sell="trial" data-days="14">14 days free</button>
+    </div>
+    <label>Customer paid</label>
+    <div class="btns" style="margin-top:4px">
+      <button type="button" data-sell="paid" data-months="1">+1 month</button>
+      <button type="button" data-sell="paid" data-months="3">+3 months</button>
+      <button type="button" data-sell="paid" data-months="12">+12 months</button>
+    </div>
+    <div class="hint">Paid early: adds on top of the current end date. Paid late: starts from today.</div>
+    <label for="sDate">Or set the end date yourself</label>
+    <div class="two"><input id="sDate" type="date"><button type="button" data-sell="date">Set date</button></div>
+    <div class="btns">
+      <button type="button" class="danger" data-sell="clear">Remove time limit</button>
+      <button type="button" id="sClose" style="margin-left:auto">Close</button>
     </div>
   </form>
 </dialog>
@@ -287,7 +325,12 @@
   function render() {
     const s = state;
     $('clock').textContent = `${niceDate(s.date)} · ${hhmm(s.time)}`;
-    $('mode').innerHTML = s.status.dryRun ? '<span class="pill dry">Dry run</span>' : s.paused ? '<span class="pill paused">Paused</span>' : '<span class="pill live">Live</span>';
+    const lic = s.licence || { limited: false };
+    $('mode').innerHTML = s.status.dryRun ? '<span class="pill dry">Dry run</span>'
+      : lic.expired ? '<span class="pill paused">Stopped</span>'
+      : s.paused ? '<span class="pill paused">Paused</span>'
+      : '<span class="pill live">Live</span>' + (lic.limited && lic.kind === 'trial' ? ' <span class="pill">Free trial</span>' : '');
+    renderLicence(lic);
 
     const missing = [];
     if (!s.status.dryRun && (!s.status.calls || (s.status.missing || []).length)) missing.push(`${s.status.provider} details: ${(s.status.missing || []).join(', ')} (calls cannot go out)`);
@@ -379,6 +422,56 @@
 
   function local(p) { return String(p || '').replace(/^\+60/, '0'); }
 
+  // ---------- free trial / subscription ----------
+  const left = (n) => (n === 0 ? 'ends today' : n === 1 ? '1 day left' : `${n} days left`);
+  function renderLicence(lic) {
+    const wa = lic.whatsapp ? `<a href="https://wa.me/${esc(lic.whatsapp)}" target="_blank" rel="noopener">WhatsApp ${esc(lic.contact)}</a>` : `WhatsApp ${esc(lic.contact)}`;
+    const what = lic.kind === 'trial' ? 'Free trial' : 'Subscription';
+    let banner = '';
+    if (lic.expired) {
+      banner = `<div class="banner bad"><b>${what} ended on ${esc(niceDate(lic.until))}</b>Driver calls are stopped. ${wa} to continue.</div>`;
+    } else if (lic.limited && lic.kind === 'trial') {
+      banner = `<div class="banner info"><b>Free trial · ${left(lic.daysLeft)}</b>Calls run until ${esc(niceDate(lic.until))}. To keep them going after that, ${wa}.</div>`;
+    } else if (lic.limited && lic.daysLeft <= 5) {
+      banner = `<div class="banner"><b>Subscription · ${left(lic.daysLeft)}</b>Paid until ${esc(niceDate(lic.until))}. ${wa} to renew.</div>`;
+    }
+    $('licence').innerHTML = banner;
+    $('licenceStatus').textContent = !lic.limited ? 'No time limit'
+      : lic.expired ? `${what} ended ${niceDate(lic.until)} · calls stopped`
+      : `${lic.kind === 'trial' ? 'Free trial until' : 'Paid until'} ${niceDate(lic.until)} (${left(lic.daysLeft)})`;
+    $('sNow').textContent = 'Now: ' + $('licenceStatus').textContent;
+  }
+
+  let sellerToken = ''; // kept only while this page is open
+  async function sellerAct(body) {
+    sellerToken = $('sPw').value.trim() || sellerToken;
+    if (!sellerToken) { toast('Type the seller password first', true); return; }
+    try {
+      const res = await fetch('/seller/licence', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-seller-token': sellerToken },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 401) sellerToken = '';
+      if (!res.ok) throw new Error(data.error || 'Something went wrong');
+      toast(!data.limited ? 'Time limit removed' : `${data.kind === 'trial' ? 'Free trial' : 'Paid'} until ${niceDate(data.until)}`);
+      await refresh();
+    } catch (e) { toast(e.message, true); }
+  }
+  $('sellerBtn').onclick = () => { $('sPw').value = ''; $('sDate').value = ''; $('sDate').min = state.date; $('sellerDialog').showModal(); };
+  $('sClose').onclick = () => $('sellerDialog').close();
+  $('sellerForm').addEventListener('click', (ev) => {
+    const b = ev.target.closest('button[data-sell]');
+    if (!b) return;
+    const action = b.dataset.sell;
+    if (action === 'trial') sellerAct({ action, days: Number(b.dataset.days) });
+    else if (action === 'paid') sellerAct({ action, months: Number(b.dataset.months) });
+    else if (action === 'date') sellerAct({ action, until: $('sDate').value });
+    else if (action === 'clear' && confirm('Remove the time limit? Calls will run with no end date.')) sellerAct({ action });
+  });
+  $('sellerForm').onsubmit = (ev) => ev.preventDefault();
+
   function describe(e, name) {
     const who = e.driverId ? name(e.driverId) : '';
     const call = e.kind === 'wake' ? 'wake-up call' : e.kind === 'engine' ? 'engine check' : 'check call';
@@ -408,6 +501,9 @@
       case 'driver_added': return `Added driver ${who}`;
       case 'paused': return 'All driver calls paused';
       case 'resumed': return 'Driver calls resumed';
+      case 'licence': return `${e.kind === 'trial' ? 'Free trial' : 'Paid'} until ${niceDate(e.until)}`;
+      case 'licence_cleared': return 'Time limit removed';
+      case 'licence_stopped': return `${e.kind === 'trial' ? 'Free trial' : 'Subscription'} ended. Driver calls stopped.`;
       default: return e.event;
     }
   }

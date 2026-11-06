@@ -139,6 +139,26 @@ function createApp({ config, engine, provider = null, log = console }) {
   }));
   app.use('/api', api);
 
+  // ---------- you, the seller: free trial / paid-until ----------
+  // Needs SELLER_TOKEN (not the customer's ADMIN_TOKEN). Too many wrong tries locks it for a while.
+  const seller = express.Router();
+  seller.use(express.json({ limit: '10kb' }));
+  const fails = [];
+  seller.use((req, res, next) => {
+    if (!config.seller.token) return res.status(503).json({ error: 'SELLER_TOKEN is not set on Railway for this copy yet' });
+    const t = Date.now();
+    while (fails.length && t - fails[0] > 15 * 60000) fails.shift();
+    if (fails.length >= 10) return res.status(429).json({ error: 'Too many wrong tries. Wait 15 minutes.' });
+    const got = Buffer.from(String(req.get('x-seller-token') || ''));
+    const want = Buffer.from(config.seller.token);
+    if (got.length === want.length && crypto.timingSafeEqual(got, want)) return next();
+    fails.push(t);
+    log.warn('[seller] wrong seller password');
+    res.status(401).json({ error: 'Wrong seller password' });
+  });
+  seller.post('/licence', wrap((req, b) => engine.setLicence(b)));
+  app.use('/seller', seller);
+
   return app;
 }
 

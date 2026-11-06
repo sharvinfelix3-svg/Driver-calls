@@ -13,6 +13,8 @@ function emptyData() {
     alerts: [], // calls to the boss
     log: [],
     paused: false,
+    // Free trial / paid-until date, set by the seller. null = no time limit.
+    licence: null, // { until: 'YYYY-MM-DD', kind: 'trial' | 'paid', stopNoted }
   };
 }
 

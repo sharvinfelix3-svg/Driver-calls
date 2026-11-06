@@ -2,7 +2,7 @@
 // what each answer means, and when to phone the boss.
 const crypto = require('crypto');
 const twilio = require('twilio');
-const { localParts, toMinutes, isHHMM, isDate, addDays } = require('./time');
+const { localParts, toMinutes, isHHMM, isDate, addDays, addMonths, daysBetween } = require('./time');
 const { normalizePhone } = require('./phone');
 const M = require('./messages');
 const { classifyOutAnswer } = require('./classify');
@@ -39,6 +39,65 @@ function createEngine({ config, store, client = null, gps = null, now = () => Da
     const d = db();
     d.log.unshift({ at: now(), ...entry });
     if (d.log.length > 300) d.log.length = 300;
+  }
+
+  // ---------- free trial / paid-until ----------
+
+  /** Where this copy stands: no limit, on a free trial, or paid until a date. */
+  function licenceStatus() {
+    const l = db().licence;
+    const contact = config.seller.contact;
+    const whatsapp = (normalizePhone(contact) || '').replace(/\D/g, '');
+    if (!l || !isDate(l.until)) return { limited: false, contact, whatsapp };
+    const today = lp().date;
+    return {
+      limited: true,
+      kind: l.kind === 'paid' ? 'paid' : 'trial',
+      until: l.until,
+      daysLeft: daysBetween(today, l.until),
+      expired: today > l.until,
+      contact,
+      whatsapp,
+    };
+  }
+
+  function endedMessage(lic) {
+    return `${lic.kind === 'trial' ? 'Free trial' : 'Subscription'} ended on ${lic.until}. WhatsApp ${lic.contact} to continue.`;
+  }
+
+  function assertLicensed() {
+    const lic = licenceStatus();
+    if (lic.expired) throw new Error(endedMessage(lic));
+  }
+
+  /** Seller only: start a free trial, add paid months, set a date, or remove the limit. */
+  function setLicence({ action, days, months, until } = {}) {
+    const d = db();
+    const today = lp().date;
+    const cur = d.licence && isDate(d.licence.until) ? d.licence : null;
+    let next;
+    if (action === 'trial') {
+      const n = Number(days);
+      if (!Number.isInteger(n) || n < 1 || n > 90) throw new Error('Trial days must be 1 to 90');
+      next = { kind: 'trial', until: addDays(today, n) };
+    } else if (action === 'paid') {
+      const n = Number(months);
+      if (!Number.isInteger(n) || n < 1 || n > 36) throw new Error('Months must be 1 to 36');
+      // Paying early adds on top of the current end date; paying late starts from today
+      const from = cur && cur.until >= today ? cur.until : today;
+      next = { kind: 'paid', until: addMonths(from, n) };
+    } else if (action === 'date') {
+      if (!isDate(until)) throw new Error('Pick an end date');
+      next = { kind: 'paid', until };
+    } else if (action === 'clear') {
+      next = null;
+    } else {
+      throw new Error('Unknown action');
+    }
+    d.licence = next;
+    addLog(next ? { event: 'licence', kind: next.kind, until: next.until } : { event: 'licence_cleared' });
+    store.save();
+    return licenceStatus();
   }
 
   const driverById = (id) => db().drivers.find((d) => d.id === id);
@@ -184,7 +243,15 @@ function createEngine({ config, store, client = null, gps = null, now = () => Da
         if (!call.ended && t - call.createdAt > rules.callStaleMinutes * 60000) handleStatus(call.cid, 'no-status');
       }
 
-      if (!d.paused) {
+      // Free trial or subscription ended: no driver calls until the seller extends it
+      const lic = licenceStatus();
+      if (lic.expired && !d.licence.stopNoted) {
+        d.licence.stopNoted = true;
+        addLog({ event: 'licence_stopped', kind: lic.kind, until: lic.until });
+        log.warn(`[licence] ${endedMessage(lic)} Driver calls are stopped.`);
+      }
+
+      if (!d.paused && !lic.expired) {
         for (const driver of [...d.drivers]) {
           const sched = scheduleFor(driver, p.date, p.weekday);
           if (!sched) continue;
@@ -684,6 +751,7 @@ function createEngine({ config, store, client = null, gps = null, now = () => Da
     const driver = driverById(driverId);
     if (!driver) throw new Error('Driver not found');
     if (!['wake', 'out'].includes(kind)) throw new Error('Unknown call type');
+    assertLicensed();
     const date = lp().date;
     const rec = dayRecord(date, driverId);
     if (rec.wake.state === 'calling' || rec.out.state === 'calling') throw new Error(`Already calling ${driver.name}`);
@@ -695,10 +763,12 @@ function createEngine({ config, store, client = null, gps = null, now = () => Da
     const driver = driverById(driverId);
     if (!driver) throw new Error('Driver not found');
     if (!['wake', 'out'].includes(kind)) throw new Error('Unknown call type');
+    assertLicensed();
     return startDriverCall(lp().date, driver, kind, { test: true });
   }
 
   function testOwnerCall() {
+    assertLicensed();
     alertOwner(M.owner[config.owner.lang].test, { reason: 'test' });
   }
 
@@ -734,6 +804,7 @@ function createEngine({ config, store, client = null, gps = null, now = () => Da
       weekday: p.weekday,
       tomorrow,
       paused: !!d.paused,
+      licence: licenceStatus(),
       drivers,
       overrides,
       alerts: d.alerts.slice(0, 10),
@@ -768,6 +839,8 @@ function createEngine({ config, store, client = null, gps = null, now = () => Da
     callNow,
     testCall,
     testOwnerCall,
+    setLicence,
+    licenceStatus,
     snapshot,
     scheduleFor,
     getTwiml,

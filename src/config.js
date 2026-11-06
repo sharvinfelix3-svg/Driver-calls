@@ -89,6 +89,13 @@ function load(env = process.env) {
       from: env.TELNYX_FROM_NUMBER || '',
     },
 
+    // You, the seller: SELLER_TOKEN lets you set a free trial or paid-until date on the phone page.
+    // Customers only get ADMIN_TOKEN, so they can't change it.
+    seller: {
+      token: env.SELLER_TOKEN || '',
+      contact: env.SELLER_CONTACT || '014-647 2974',
+    },
+
     owner: {
       // 0146472974 -> +60146472974 (calling services need the country code)
       phone: normalizePhone(env.OWNER_PHONE) || String(env.OWNER_PHONE || '').trim(),

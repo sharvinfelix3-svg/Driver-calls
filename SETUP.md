@@ -75,6 +75,18 @@ Ask them to **save the calling number as a contact** (e.g. "Wake-up Call Empire"
 > • Panggilan "dah keluar?": tekan 1 = dah keluar, 2 = belum, 3 = ada masalah.
 > Kalau tak angkat 3 kali, boss akan dapat panggilan.
 
+## Selling to another company: free trial, then pay
+
+Each customer gets their own copy (own link, own `ADMIN_TOKEN`). You keep the Railway login, so only you can change the time limit.
+
+1. On the customer's copy in **Railway → Variables**, add `SELLER_TOKEN`: your own seller password, different from the customer's `ADMIN_TOKEN`. Never give it to customers. (Optional: `SELLER_CONTACT`, the number customers WhatsApp to pay. Default `014-647 2974`.)
+2. Open the customer's phone page → **Today → Subscription → Seller**, type the seller password, and tap **7 days free** or **14 days free**.
+3. The customer sees "Free trial · X days left". After the last day, driver calls stop and the page says "Free trial ended — WhatsApp … to continue".
+4. When they pay: **Seller → +1 month** (or +3 / +12). Paid early adds on top of the end date; paid late starts from today. Calls start again on the next tick.
+5. **Remove time limit** makes it run with no end date (use this for your own company).
+
+A copy with no trial or paid date set has no time limit.
+
 ## Day-to-day
 
 - **Driver off tomorrow:** Today tab → Tomorrow → *Off tomorrow*.
