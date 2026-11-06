@@ -65,7 +65,7 @@ test('add a driver, set a day off, see it in the state', async () => {
     assert.equal(state.date, '2026-11-09');
     assert.equal(state.tomorrow, '2026-11-10');
     assert.equal(state.drivers[0].tomorrow, null, 'off tomorrow');
-    assert.deepEqual(state.drivers[0].today.schedule, { wakeTime: '05:00', outTime: '06:00' });
+    assert.deepEqual(state.drivers[0].today.schedule, { wakeTime: '05:00', outTime: '06:00', engineTime: '', plate: '' });
     assert.equal(state.overrides.length, 1);
 
     res = await api(base, 'DELETE', `/overrides?date=2026-11-10&driverId=${driver.id}`);

@@ -113,6 +113,8 @@ function load(env = process.env) {
       outMaxCalls: num(env.OUT_MAX_CALLS, 20),
       outRecheckMinutes: num(env.OUT_RECHECK_MINUTES, 10),
       outMaxNotYet: num(env.OUT_MAX_NOT_YET, 2),
+      // After a driver presses "dah keluar", re-check the lorry engine this many minutes later
+      saidOutCheckMinutes: num(env.SAID_OUT_CHECK_MINUTES, 3),
       // If the server was down at call time, still call if it's no later than this
       catchUpMinutes: num(env.CATCH_UP_MINUTES, 30),
       // Calls to the boss

@@ -25,7 +25,7 @@ function sayText(twiml) {
   return [...String(twiml).matchAll(/<Say[^>]*>([\s\S]*?)<\/Say>/g)].map((m) => m[1]).join(' ');
 }
 
-function createEngine({ config, store, client = null, now = () => Date.now(), classify = classifyOutAnswer, log = console, later = () => {} }) {
+function createEngine({ config, store, client = null, gps = null, now = () => Date.now(), classify = classifyOutAnswer, log = console, later = () => {} }) {
   const rules = config.rules;
   const db = () => store.data;
   const lp = (ms = now()) => localParts(ms, config.timezone);
@@ -51,22 +51,25 @@ function createEngine({ config, store, client = null, now = () => Date.now(), cl
     if (!driver || driver.active === false) return null;
     const ov = db().overrides[date] && db().overrides[date][driver.id];
     if (ov && ov.off) return null;
+    const engine = { engineTime: driver.plate ? driver.engineTime || '' : '', plate: driver.plate || '' };
     if (ov) {
       return {
         wakeTime: 'wakeTime' in ov ? ov.wakeTime : driver.wakeTime || '',
         outTime: 'outTime' in ov ? ov.outTime : driver.outTime || '',
+        ...engine,
         changed: true,
       };
     }
     const days = Array.isArray(driver.days) ? driver.days : ALL_DAYS;
     if (!days.includes(weekday)) return null;
-    return { wakeTime: driver.wakeTime || '', outTime: driver.outTime || '' };
+    return { wakeTime: driver.wakeTime || '', outTime: driver.outTime || '', ...engine };
   }
 
   function dayRecord(date, driverId) {
     const d = db();
     d.days[date] = d.days[date] || {};
     d.days[date][driverId] = d.days[date][driverId] || { wake: newFlow(), out: newFlow() };
+    if (!d.days[date][driverId].engine) d.days[date][driverId].engine = newFlow();
     return d.days[date][driverId];
   }
 
@@ -186,6 +189,13 @@ function createEngine({ config, store, client = null, now = () => Date.now(), cl
           const sched = scheduleFor(driver, p.date, p.weekday);
           if (!sched) continue;
           const rec = dayRecord(p.date, driver.id);
+
+          // Lorry engine check at the "enjin hidup" time (needs GPS)
+          if (rec.engine.state === 'waiting' && isHHMM(sched.engineTime) && p.minutes >= toMinutes(sched.engineTime)) {
+            if (p.minutes - toMinutes(sched.engineTime) > rules.catchUpMinutes) markMissed(driver, 'engine', rec.engine);
+            else await checkEngine(p.date, driver, sched);
+          }
+
           for (const kind of ['wake', 'out']) {
             const flow = rec[kind];
             if (kind === 'out' && BUSY.has(rec.wake.state)) continue; // finish the wake-up first
@@ -219,12 +229,75 @@ function createEngine({ config, store, client = null, now = () => Date.now(), cl
     }
   }
 
+  /** At the engine time: is the lorry's engine on? If not, tell the boss and ask the driver. */
+  async function checkEngine(date, driver, sched) {
+    const rec = dayRecord(date, driver.id);
+    const flow = rec.engine;
+    flow.attempts += 1;
+    if (!gps) {
+      flow.state = 'no_gps';
+      flow.result = 'no_gps';
+      flow.doneAt = now();
+      addLog({ driverId: driver.id, kind: 'engine', event: 'engine_no_gps', plate: sched.plate });
+      return;
+    }
+    flow.state = 'checking';
+    let st;
+    try {
+      st = await gps.engineStatus(sched.plate);
+    } catch (e) {
+      log.error(`[gps] could not read ${sched.plate}: ${e.message}`);
+      flow.lastAnswer = e.message;
+      if (flow.attempts < 3) {
+        flow.state = 'waiting'; // try again on the next clock check
+      } else {
+        flow.state = 'error';
+        flow.result = 'error';
+        flow.doneAt = now();
+        addLog({ driverId: driver.id, kind: 'engine', event: 'engine_error', plate: sched.plate, detail: e.message });
+      }
+      return;
+    }
+    flow.doneAt = now();
+    flow.since = (st && st.since) || null;
+    if (st && st.on) {
+      flow.state = 'done';
+      flow.result = 'on';
+      addLog({ driverId: driver.id, kind: 'engine', event: 'engine_on', plate: sched.plate });
+      return;
+    }
+    flow.state = 'alerted';
+    flow.result = 'off';
+    addLog({ driverId: driver.id, kind: 'engine', event: 'engine_off', plate: sched.plate });
+    const O = M.owner[config.owner.lang];
+    alertOwner(`${O.engineOff(driver, sched.plate, sched.engineTime)} ${O.number(driver)}`, { driverId: driver.id, reason: 'engine_off' });
+    // Ask the driver straight away, unless he has already been asked today
+    if (rec.out.state === 'waiting' && !BUSY.has(rec.wake.state)) await startDriverCall(date, driver, 'out');
+  }
+
+  /** Driver pressed "dah keluar". A few minutes later, make sure the engine really is on. */
+  function checkSaidOut(driver, sched) {
+    if (!gps || !sched || !sched.plate) return;
+    later(async () => {
+      try {
+        const st = await gps.engineStatus(sched.plate);
+        if (st && st.on) return;
+        addLog({ driverId: driver.id, kind: 'engine', event: 'said_out_engine_off', plate: sched.plate });
+        const O = M.owner[config.owner.lang];
+        alertOwner(`${O.saidOutEngineOff(driver, sched.plate)} ${O.number(driver)}`, { driverId: driver.id, reason: 'said_out_engine_off' });
+        store.save();
+      } catch (e) {
+        log.warn(`[gps] could not double-check ${sched.plate}: ${e.message}`);
+      }
+    }, rules.saidOutCheckMinutes * 60000);
+  }
+
   function markMissed(driver, kind, flow) {
     flow.state = 'missed';
     flow.result = 'missed';
     flow.doneAt = now();
-    addLog({ driverId: driver.id, kind, event: 'missed', note: 'The system was off at call time' });
-    log.warn(`[tick] Skipped ${kind} call for ${driver.name}: the system was off at call time.`);
+    addLog({ driverId: driver.id, kind, event: 'missed', note: 'The system was off at that time' });
+    log.warn(`[tick] Skipped ${kind} ${kind === 'engine' ? 'check' : 'call'} for ${driver.name}: the system was off at that time.`);
   }
 
   function prune(today) {
@@ -322,6 +395,7 @@ function createEngine({ config, store, client = null, now = () => Date.now(), cl
       flow.doneAt = now();
       addLog({ driverId: driver.id, kind: 'out', event: 'out', via });
       say(S.outDone);
+      checkSaidOut(driver, sched);
     } else if (outcome === 'not_yet') {
       flow.notYet += 1;
       addLog({ driverId: driver.id, kind: 'out', event: 'not_yet', count: flow.notYet, via });
@@ -520,29 +594,33 @@ function createEngine({ config, store, client = null, now = () => Date.now(), cl
     if ('lang' in input) out.lang = input.lang === 'en' ? 'en' : 'ms';
     if ('wakeTime' in input) out.wakeTime = input.wakeTime || '';
     if ('outTime' in input) out.outTime = input.outTime || '';
+    if ('plate' in input) out.plate = String(input.plate || '').toUpperCase().replace(/\s+/g, ' ').trim().slice(0, 15);
+    if ('engineTime' in input) out.engineTime = input.engineTime || '';
     if ('days' in input) out.days = [...new Set((input.days || []).map(Number).filter((n) => Number.isInteger(n) && n >= 0 && n <= 6))].sort();
     if ('active' in input) out.active = !!input.active;
 
     const errors = [];
     if (!out.name) errors.push('Name is needed');
     if (!out.phone) errors.push('Phone number looks wrong (use e.g. 012-345 6789)');
-    errors.push(...timeErrors(out.wakeTime, out.outTime));
+    errors.push(...timeErrors(out.wakeTime, out.outTime, !!out.engineTime));
+    if (out.engineTime && !isHHMM(out.engineTime)) errors.push('Engine time looks wrong');
+    if (out.engineTime && !out.plate) errors.push('Add the lorry plate number for the engine check');
     if (!out.days || !out.days.length) errors.push('Pick at least one working day');
     if (errors.length) throw new Error(errors.join('. '));
     return out;
   }
 
-  function timeErrors(wakeTime, outTime) {
+  function timeErrors(wakeTime, outTime, hasEngineTime = false) {
     const errors = [];
     if (wakeTime && !isHHMM(wakeTime)) errors.push('Wake-up time looks wrong');
     if (outTime && !isHHMM(outTime)) errors.push('Check time looks wrong');
-    if (!wakeTime && !outTime) errors.push('Set a wake-up time, a check time, or both');
+    if (!wakeTime && !outTime && !hasEngineTime) errors.push('Set a wake-up time, a check time, or both');
     if (isHHMM(wakeTime) && isHHMM(outTime) && toMinutes(outTime) <= toMinutes(wakeTime)) errors.push('Check time must be after wake-up time');
     return errors;
   }
 
   function addDriver(input) {
-    const driver = cleanDriver({ lang: 'ms', days: [1, 2, 3, 4, 5, 6], active: true, wakeTime: '', outTime: '', ...input });
+    const driver = cleanDriver({ lang: 'ms', days: [1, 2, 3, 4, 5, 6], active: true, wakeTime: '', outTime: '', plate: '', engineTime: '', ...input });
     driver.id = newId();
     db().drivers.push(driver);
     addLog({ event: 'driver_added', driverId: driver.id });
@@ -637,6 +715,7 @@ function createEngine({ config, store, client = null, now = () => Date.now(), cl
           schedule: scheduleFor(driver, p.date, p.weekday),
           wake: rec ? rec.wake : newFlow(),
           out: rec ? rec.out : newFlow(),
+          engine: (rec && rec.engine) || newFlow(),
         },
         tomorrow: scheduleFor(driver, tomorrow),
       };
@@ -662,6 +741,7 @@ function createEngine({ config, store, client = null, now = () => Date.now(), cl
       status: {
         provider: config.providerName,
         calls: !!client,
+        gps: !!gps,
         missing: missingProviderSettings(config),
         storageWarning: config.storageWarning,
         publicUrl: !!config.publicUrl,

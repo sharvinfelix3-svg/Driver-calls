@@ -107,6 +107,7 @@
           <button id="pauseBtn" type="button"></button>
         </div>
         <div class="btns"><button type="button" id="testOwner">Test call to my phone</button></div>
+        <div class="muted" id="gpsStatus" style="margin-top:12px"></div>
       </div>
       <div class="card" id="vonageCard" hidden>
         <div class="name" style="font-size:16px">Vonage key</div>
@@ -173,6 +174,11 @@
       <div><label for="dOut">"Dah keluar?" call</label><input id="dOut" type="time"></div>
     </div>
     <div class="hint">Leave one empty if you only want the other call.</div>
+    <div class="two">
+      <div><label for="dPlate">Lorry plate</label><input id="dPlate" maxlength="15" placeholder="e.g. BSN 4631" autocapitalize="characters"></div>
+      <div><label for="dEngine">Enjin hidup by</label><input id="dEngine" type="time"></div>
+    </div>
+    <div class="hint">Optional. With GPS connected, if the engine is still off at this time you get a call and the driver is asked straight away.</div>
     <label>Working days</label>
     <div class="days" id="dDays"></div>
     <label class="switch" style="margin-top:14px"><span>Active (gets calls)</span><input id="dActive" type="checkbox" style="width:auto"></label>
@@ -247,6 +253,18 @@
       default: return chip('', f.state);
     }
   }
+  function engineChip(f, time, plate) {
+    switch (f.state) {
+      case 'waiting': return chip('', `${plate} · check at ${hhmm(time)}`);
+      case 'checking': return chip('info', `${plate} · checking GPS…`);
+      case 'no_gps': return chip('warn', `${plate} · GPS not connected`);
+      case 'done': return chip('ok', `${plate} · enjin hidup ✓`);
+      case 'alerted': return chip('bad', `${plate} · enjin OFF at ${hhmm(time)} · you were called`);
+      case 'error': return chip('warn', `${plate} · GPS error`);
+      case 'missed': return chip('warn', 'Missed (system was off)');
+      default: return chip('', f.state);
+    }
+  }
   function outChip(f, time) {
     switch (f.state) {
       case 'waiting': return chip('', time ? `Check at ${hhmm(time)}` : 'No check call');
@@ -291,6 +309,7 @@
             ${sc.changed ? '<div class="muted">Changed times today</div>' : ''}
             ${sc.wakeTime ? `<div class="line"><span class="what">Wake-up</span>${wakeChip(d.today.wake, sc.wakeTime)}</div>` : ''}
             ${sc.outTime ? `<div class="line"><span class="what">Keluar</span>${outChip(d.today.out, sc.outTime)}</div>${said}` : ''}
+            ${sc.engineTime ? `<div class="line"><span class="what">Enjin</span>${engineChip(d.today.engine, sc.engineTime, sc.plate)}</div>` : ''}
             <div class="btns">
               ${sc.wakeTime ? `<button class="small" data-now="wake" data-id="${d.id}">Wake-up call now</button>` : ''}
               ${sc.outTime ? `<button class="small" data-now="out" data-id="${d.id}">Check call now</button>` : ''}
@@ -310,6 +329,10 @@
       </div>`;
     }).join('')}<div class="hint">For other dates or different times, use the Changes tab.</div></div>`;
 
+    const usesEngine = s.drivers.some((d) => d.engineTime);
+    $('gpsStatus').textContent = s.status.gps
+      ? 'GPS: connected. Engine checks are on.'
+      : usesEngine ? 'GPS: not connected yet, so engine checks are off. Your engine times are saved.' : '';
     const isVonage = s.status.provider === 'Vonage';
     $('vonageCard').hidden = !isVonage;
     if (isVonage) {
@@ -328,6 +351,7 @@
         <div class="row"><div class="name">${esc(d.name)}${d.active === false ? ' <span class="chip">Inactive</span>' : ''}</div><button class="small" data-edit="${d.id}">Edit</button></div>
         <div class="muted">${esc(local(d.phone))} · ${d.lang === 'en' ? 'English' : 'Melayu'}</div>
         <div class="muted">${d.wakeTime ? 'Wake-up ' + hhmm(d.wakeTime) : 'No wake-up call'} · ${d.outTime ? 'Check ' + hhmm(d.outTime) : 'No check call'}</div>
+        ${d.plate ? `<div class="muted">Lorry ${esc(d.plate)}${d.engineTime ? ' · enjin hidup by ' + hhmm(d.engineTime) : ''}</div>` : ''}
         <div class="muted">${d.days.length === 7 ? 'Every day' : d.days.map((n) => DAY[n]).join(', ')}</div>
         <div class="btns">
           <button class="small" data-test="wake" data-id="${d.id}">Test wake-up call</button>
@@ -357,7 +381,7 @@
 
   function describe(e, name) {
     const who = e.driverId ? name(e.driverId) : '';
-    const call = e.kind === 'wake' ? 'wake-up call' : 'check call';
+    const call = e.kind === 'wake' ? 'wake-up call' : e.kind === 'engine' ? 'engine check' : 'check call';
     switch (e.event) {
       case 'calling': return `Calling ${who}: ${call} (try ${e.attempt})`;
       case 'test_call': return `Test ${call} to ${who}`;
@@ -367,6 +391,11 @@
       case 'problem': return `${who} pressed problem${e.said ? `: “${e.said}”` : ''}`;
       case 'no_answer': return `${who} did not answer the ${call} (try ${e.attempt})`;
       case 'missed': return `Skipped ${call} for ${who}: system was off`;
+      case 'engine_on': return `Lorry ${e.plate}: engine on (${who})`;
+      case 'engine_off': return `Lorry ${e.plate}: engine still OFF, calling you and ${who}`;
+      case 'engine_no_gps': return `Lorry ${e.plate}: engine check skipped, GPS not connected`;
+      case 'engine_error': return `Lorry ${e.plate}: GPS error (${e.detail})`;
+      case 'said_out_engine_off': return `${who} pressed "dah keluar" but lorry ${e.plate} engine is OFF, calling you`;
       case 'gave_up': return `Stopped calling ${who} after ${e.attempt} tries (${call})`;
       case 'alert_owner': return `Calling you: ${e.message}`;
       case 'owner_confirmed': return 'You confirmed the alert call';
@@ -410,6 +439,8 @@
     $('dLang').value = d ? d.lang : 'ms';
     $('dWake').value = d ? d.wakeTime : '05:30';
     $('dOut').value = d ? d.outTime : '06:30';
+    $('dPlate').value = d ? d.plate || '' : '';
+    $('dEngine').value = d ? d.engineTime || '' : '';
     const days = d ? d.days : [1, 2, 3, 4, 5, 6];
     $('dDays').querySelectorAll('input').forEach((c) => (c.checked = days.includes(Number(c.value))));
     $('dActive').checked = d ? d.active !== false : true;
@@ -423,6 +454,7 @@
     const body = {
       name: $('dName').value, phone: $('dPhone').value, lang: $('dLang').value,
       wakeTime: $('dWake').value, outTime: $('dOut').value, active: $('dActive').checked,
+      plate: $('dPlate').value, engineTime: $('dEngine').value,
       days: [...$('dDays').querySelectorAll('input:checked')].map((c) => Number(c.value)),
     };
     act(async () => {

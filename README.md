@@ -26,6 +26,14 @@ Spoken answers (the words in quotes) work when `SPEECH_INPUT=true`. That's on by
 
 The check call waits until the wake-up call is finished, and only one call goes to each person at a time. If two alerts happen together, you get one call with both.
 
+**3. Lorry engine check** (optional, needs GPS connected)
+Set a lorry plate and an "enjin hidup by" time for a driver. At that time the system asks the GPS whether the engine is on.
+- Engine ON → nothing to do.
+- Engine OFF → **you get a call** ("Lori B S N 4 6 3 1, enjin belum hidup") and the driver gets the "dah keluar?" call straight away.
+- If a driver presses 1 ("dah keluar") but the engine is still off 3 minutes later → **you get a call**.
+
+Until the GPS is connected, the times are saved and the page shows "GPS not connected".
+
 ## Your phone page (`/admin`)
 
 - **Today**: live status for every driver (awake, dah keluar, belum, no answer), a button to call them yourself, and buttons to start a wake-up or check call now.

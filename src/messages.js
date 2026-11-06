@@ -3,6 +3,13 @@
 const { sayTime, greeting, sayCount } = require('./time');
 const { spellDigits } = require('./phone');
 
+/** 'BSN 4631' -> 'B S N, 4 6 3 1' so the voice reads it letter by letter */
+const sayPlate = (plate) =>
+  String(plate || '')
+    .split(' ')
+    .map((part) => part.split('').join(' '))
+    .join(', ');
+
 const driver = {
   ms: {
     wakeIntro: (d, nowHHMM, company) =>
@@ -55,6 +62,9 @@ const owner = {
       `${d.name} masih belum keluar. Saya dah tanya ${sayCount(n, 'ms')} kali.${outTime ? ` Masa keluar sepatutnya ${sayTime(outTime, 'ms')}.` : ''}`,
     problem: (d, said) =>
       `${d.name} kata ada masalah, belum boleh keluar.${said ? ` Dia sebut: ${said}.` : ''} Sila telefon dia sekarang.`,
+    engineOff: (d, plate, time) =>
+      `Lori ${sayPlate(plate)}, enjin belum hidup. Sepatutnya hidup ${sayTime(time, 'ms')}. Pemandu, ${d.name}. Saya akan telefon dia sekarang.`,
+    saidOutEngineOff: (d, plate) => `${d.name} kata dah keluar, tapi enjin lori ${sayPlate(plate)} masih belum hidup. Sila semak.`,
     number: (d) => `Nombor ${d.name}, ${spellDigits(d.phone, 'ms')}.`,
     open: 'Helo boss.',
     ackPrompt: 'Tekan satu untuk sahkan boss dah dengar.',
@@ -67,6 +77,9 @@ const owner = {
     notOut: (d, n, outTime) =>
       `${d.name} has still not left. I asked ${n} times.${outTime ? ` Leaving time was ${sayTime(outTime, 'en')}.` : ''}`,
     problem: (d, said) => `${d.name} reports a problem and cannot leave yet.${said ? ` The words were: ${said}.` : ''} Please call now.`,
+    engineOff: (d, plate, time) =>
+      `Lorry ${sayPlate(plate)}: the engine is still off. It should be on by ${sayTime(time, 'en')}. The driver is ${d.name}. I am calling the driver now.`,
+    saidOutEngineOff: (d, plate) => `${d.name} said he has left, but the engine of lorry ${sayPlate(plate)} is still off. Please check.`,
     number: (d) => `${d.name}'s number is ${spellDigits(d.phone, 'en')}.`,
     open: 'Hello boss.',
     ackPrompt: 'Press 1 to confirm you heard this.',
@@ -86,4 +99,4 @@ const hints = {
   },
 };
 
-module.exports = { driver, owner, hints };
+module.exports = { driver, owner, hints, sayPlate };
