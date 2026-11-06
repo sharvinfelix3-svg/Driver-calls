@@ -88,7 +88,9 @@ function createApp({ config, engine, provider = null, log = console }) {
       if (isVonage) {
         // Vonage reports every step (started, ringing, answered...). Only the end matters.
         const st = String(p.status || '');
-        if (VONAGE_END_STATUSES.has(st)) engine.handleStatus(String(req.query.cid || ''), st);
+        const detail = String(p.detail || p.reason || p.error_title || '');
+        if (VONAGE_END_STATUSES.has(st)) engine.handleStatus(String(req.query.cid || ''), st, detail);
+        else if (st) log.info(`[vonage] call ${String(req.query.cid || '')}: ${st}${detail ? ` (${detail})` : ''}`);
       } else {
         engine.handleStatus(String(req.query.cid || ''), p.CallStatus || p.call_status || 'completed');
       }

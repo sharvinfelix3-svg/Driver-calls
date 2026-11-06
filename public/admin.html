@@ -368,6 +368,11 @@
       case 'alert_owner': return `Calling you: ${e.message}`;
       case 'owner_confirmed': return 'You confirmed the alert call';
       case 'owner_no_answer': return `You did not answer the alert call (${e.attempts} tries)`;
+      case 'call_end': {
+        const to = e.kind === 'owner' ? 'you' : who;
+        const what = e.test ? 'Test call' : e.kind === 'owner' ? 'Alert call' : 'Call';
+        return `${what} to ${to} ended: ${e.status}${e.detail ? ` (${e.detail})` : ''}`;
+      }
       case 'driver_added': return `Added driver ${who}`;
       case 'paused': return 'All driver calls paused';
       case 'resumed': return 'Driver calls resumed';

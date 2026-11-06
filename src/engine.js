@@ -156,6 +156,7 @@ function createEngine({ config, store, client = null, now = () => Date.now(), cl
     try {
       const res = await placeCall(driver.phone, driverCallTwiml(driver, kind, cid, { test }), cid);
       call.sid = res && res.sid;
+      log.info(`[call] ${test ? 'test ' : ''}${kind} call to ${driver.name} placed (${call.sid})`);
     } catch (e) {
       log.error(`[call] could not call ${driver.name}: ${e.message}`);
       call.error = e.message;
@@ -354,12 +355,22 @@ function createEngine({ config, store, client = null, now = () => Date.now(), cl
   }
 
   /** The calling service says a call has ended. */
-  function handleStatus(cid, status) {
+  // Call endings worth showing in the Log (a normal answered call ends "completed")
+  const QUIET_ENDS = new Set(['completed', 'no-answer', 'no-status', 'unanswered', 'timeout', 'busy']);
+
+  function handleStatus(cid, status, detail = '') {
     const call = db().calls[cid];
     if (!call || call.ended) return;
     call.ended = true;
     call.status = status;
+    call.detail = detail;
     call.endedAt = now();
+    if (call.test || call.kind === 'owner' || !QUIET_ENDS.has(status)) {
+      if (!(call.handled && status === 'completed')) {
+        addLog({ event: 'call_end', driverId: call.driverId, kind: call.kind, status, detail: detail || call.error || '', test: !!call.test });
+      }
+    }
+    if (!QUIET_ENDS.has(status) || detail) log.warn(`[call] ${call.kind} call ${cid} ended: ${status}${detail ? ` (${detail})` : ''}${call.error ? ` — ${call.error}` : ''}`);
     if (call.kind === 'owner') {
       ownerCallEnded(call);
       store.save();
@@ -441,6 +452,7 @@ function createEngine({ config, store, client = null, now = () => Date.now(), cl
     try {
       const res = await placeCall(config.owner.phone || '(OWNER_PHONE)', ownerTwiml(alert, cid), cid);
       db().calls[cid].sid = res && res.sid;
+      log.info(`[call] call to boss placed (${db().calls[cid].sid})`);
     } catch (e) {
       log.error(`[alert] could not call the boss: ${e.message}`);
       alert.error = e.message;
