@@ -52,7 +52,7 @@ function load(env = process.env) {
     dataDir,
     storageWarning: storageWarning(env, dataDir),
     timezone: env.TIMEZONE || 'Asia/Kuala_Lumpur',
-    companyName: env.COMPANY_NAME || 'Pacific Venture Logistics',
+    companyName: env.COMPANY_NAME || 'Empire Creation',
     dryRun: bool(env.DRY_RUN, false),
     validateTwilioSignature: bool(env.VALIDATE_TWILIO_SIGNATURE, true),
 

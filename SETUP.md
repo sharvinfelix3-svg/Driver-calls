@@ -68,7 +68,7 @@ Set `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` and `TWILIO_FROM_NUMBER`. Turn on 
 
 ## 4. Tell your drivers
 
-Ask them to **save the calling number as a contact** (e.g. "Wake-up Call PVL") so their phone doesn't block it as spam. Then WhatsApp them:
+Ask them to **save the calling number as a contact** (e.g. "Wake-up Call Empire") so their phone doesn't block it as spam. Then WhatsApp them:
 
 > Mulai esok, sistem akan telefon untuk kejut bangun dan tanya dah keluar ke belum. Nombor: +1 xxx xxx xxxx (sila save).
 > • Panggilan bangun: angkat dan tekan mana-mana nombor.

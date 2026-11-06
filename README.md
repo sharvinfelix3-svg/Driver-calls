@@ -5,7 +5,7 @@ Phones your lorry drivers every working morning (through Vonage, Telnyx or Twili
 ## What happens each morning
 
 **1. Wake-up call** at the driver's wake-up time
-> "Selamat pagi Ravi. Ini panggilan bangun tidur dari Pacific Venture Logistics. Sekarang pukul lima setengah pagi. Tekan mana-mana nombor untuk sahkan awak dah bangun."
+> "Selamat pagi Ravi. Ini panggilan bangun tidur dari Empire Creation. Sekarang pukul lima setengah pagi. Tekan mana-mana nombor untuk sahkan awak dah bangun."
 
 - Presses any key → "Bagus. Ingat, keluar pukul enam setengah pagi." Done.
 - No answer (or answers and says nothing) → calls again every 5 minutes. After 3 tries, **you get a call**.
