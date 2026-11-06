@@ -102,11 +102,15 @@ function load(env = process.env) {
 
     rules: {
       // Wake-up call: how many tries before calling the boss, and the gap between tries
+      // Wake-up: call again straight away if no answer (0 = no waiting),
+      // phone the boss after WAKE_MAX_ATTEMPTS missed calls, keep calling until WAKE_MAX_CALLS
       wakeMaxAttempts: num(env.WAKE_MAX_ATTEMPTS, 3),
-      wakeRetryMinutes: num(env.WAKE_RETRY_MINUTES, 5),
+      wakeRetryMinutes: num(env.WAKE_RETRY_MINUTES, 0),
+      wakeMaxCalls: num(env.WAKE_MAX_CALLS, 20),
       // "Dah keluar?" call
       outMaxAttempts: num(env.OUT_MAX_ATTEMPTS, 3),
-      outRetryMinutes: num(env.OUT_RETRY_MINUTES, 5),
+      outRetryMinutes: num(env.OUT_RETRY_MINUTES, 0),
+      outMaxCalls: num(env.OUT_MAX_CALLS, 20),
       outRecheckMinutes: num(env.OUT_RECHECK_MINUTES, 10),
       outMaxNotYet: num(env.OUT_MAX_NOT_YET, 2),
       // If the server was down at call time, still call if it's no later than this

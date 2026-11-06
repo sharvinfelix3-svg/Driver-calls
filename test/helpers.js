@@ -8,7 +8,18 @@ const KL = (hhmm, date = '2026-11-09') => Date.parse(`${date}T${hhmm}:00+08:00`)
 const quietLog = { info() {}, warn() {}, error() {}, log() {} };
 
 function setup({ env = {}, storePath = null, startAt = KL('05:00'), classify } = {}) {
-  const config = load({ PUBLIC_URL: 'https://calls.example.com', OWNER_PHONE: '+60111111111', ADMIN_TOKEN: 'secret', ...env });
+  // These older tests use "wait 5 minutes, stop after 3 calls". The default (call again
+  // straight away, keep calling) is tested separately in nonstop.test.js.
+  const config = load({
+    PUBLIC_URL: 'https://calls.example.com',
+    OWNER_PHONE: '+60111111111',
+    ADMIN_TOKEN: 'secret',
+    WAKE_RETRY_MINUTES: '5',
+    OUT_RETRY_MINUTES: '5',
+    WAKE_MAX_CALLS: '3',
+    OUT_MAX_CALLS: '3',
+    ...env,
+  });
   const store = createStore(storePath);
   const clock = { t: startAt };
   const created = [];

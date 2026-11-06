@@ -8,7 +8,7 @@ Phones your lorry drivers every working morning (through Vonage, Telnyx or Twili
 > "Selamat pagi Ravi. Ini panggilan bangun tidur dari Empire Creation. Sekarang pukul lima setengah pagi. Tekan mana-mana nombor untuk sahkan awak dah bangun."
 
 - Presses any key → "Bagus. Ingat, keluar pukul enam setengah pagi." Done.
-- No answer (or answers and says nothing) → calls again every 5 minutes. After 3 tries, **you get a call**.
+- No answer (or answers and says nothing) → **calls again straight away, non-stop**. After 3 missed calls **you get a call**, and it keeps calling him until he answers (stops after 20 calls).
 
 **2. "Dah keluar?" call** at the driver's check time
 > "Helo Ravi. Dah keluar ke belum? Kalau dah keluar, tekan satu. Kalau belum, tekan dua. Kalau ada masalah, tekan tiga."
@@ -18,7 +18,7 @@ Phones your lorry drivers every working morning (through Vonage, Telnyx or Twili
 | **1** / "dah keluar", "otw" | "Hati-hati memandu." Done. |
 | **2** / "belum", "kejap" | Calls back in 10 minutes. Second "belum" → **you get a call**. |
 | **3** / "lori rosak", "tayar pancit" | **You get a call right away**, with what he said. |
-| No answer ×3 | **You get a call.** |
+| No answer | Calls again straight away. After 3 misses **you get a call**, and it keeps calling (up to 20). |
 
 Spoken answers (the words in quotes) work when `SPEECH_INPUT=true`. That's on by default with Twilio and off with Vonage and Telnyx, where keypresses are the reliable way.
 

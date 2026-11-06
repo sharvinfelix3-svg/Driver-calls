@@ -48,9 +48,9 @@ const driver = {
 // What the boss hears. `n` = how many tries.
 const owner = {
   ms: {
-    wakeNoAnswer: (d, n) => `${d.name} tak angkat panggilan bangun tidur. Saya dah telefon ${sayCount(n, 'ms')} kali. Sila telefon dia.`,
+    wakeNoAnswer: (d, n) => `${d.name} tak angkat panggilan bangun tidur. Saya dah telefon ${sayCount(n, 'ms')} kali, dan saya akan terus telefon dia. Sila telefon dia juga.`,
     outNoAnswer: (d, n) =>
-      `${d.name} tak angkat bila saya telefon tanya dah keluar ke belum. Saya dah cuba ${sayCount(n, 'ms')} kali. Sila telefon dia.`,
+      `${d.name} tak angkat bila saya telefon tanya dah keluar ke belum. Saya dah cuba ${sayCount(n, 'ms')} kali, dan saya akan terus telefon dia. Sila telefon dia juga.`,
     notOut: (d, n, outTime) =>
       `${d.name} masih belum keluar. Saya dah tanya ${sayCount(n, 'ms')} kali.${outTime ? ` Masa keluar sepatutnya ${sayTime(outTime, 'ms')}.` : ''}`,
     problem: (d, said) =>
@@ -62,8 +62,8 @@ const owner = {
     test: 'Ini panggilan ujian dari sistem panggilan pemandu. Kalau boss dengar ini, sistem dah jalan.',
   },
   en: {
-    wakeNoAnswer: (d, n) => `${d.name} did not answer the wake-up call. I called ${n} times. Please give a call.`,
-    outNoAnswer: (d, n) => `${d.name} did not answer when I called to check about leaving. I tried ${n} times. Please give a call.`,
+    wakeNoAnswer: (d, n) => `${d.name} did not answer the wake-up call. I called ${n} times and will keep calling. Please give a call too.`,
+    outNoAnswer: (d, n) => `${d.name} did not answer when I called to check about leaving. I tried ${n} times and will keep calling. Please give a call too.`,
     notOut: (d, n, outTime) =>
       `${d.name} has still not left. I asked ${n} times.${outTime ? ` Leaving time was ${sayTime(outTime, 'en')}.` : ''}`,
     problem: (d, said) => `${d.name} reports a problem and cannot leave yet.${said ? ` The words were: ${said}.` : ''} Please call now.`,

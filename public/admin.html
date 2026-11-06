@@ -234,13 +234,15 @@
   const niceDate = (d) => new Date(d + 'T00:00:00Z').toLocaleDateString('en-GB', { timeZone: 'UTC', weekday: 'short', day: 'numeric', month: 'short' });
 
   // ---------- status chips ----------
+  const told = (f) => (f.ownerAlerted ? ' · you were called' : '');
+  const again = (f) => (f.nextAt && f.nextAt - Date.now() > 60000 ? `trying again ${fmtTime(f.nextAt)}` : 'calling again now');
   function wakeChip(f, time) {
     switch (f.state) {
       case 'waiting': return chip('', time ? `Wake-up at ${hhmm(time)}` : 'No wake-up call');
-      case 'calling': return chip('info', `Calling now (try ${f.attempts})`);
-      case 'scheduled': return chip('warn', `No answer · trying again ${fmtTime(f.nextAt)}`);
+      case 'calling': return chip(f.ownerAlerted ? 'bad' : 'info', `Calling now (try ${f.attempts})${told(f)}`);
+      case 'scheduled': return chip(f.ownerAlerted ? 'bad' : 'warn', `No answer ${f.attempts}× · ${again(f)}${told(f)}`);
       case 'done': return chip('ok', `Awake · ${fmtTime(f.doneAt)}`);
-      case 'alerted': return chip('bad', `No answer ${f.attempts}× · you were called`);
+      case 'alerted': return chip('bad', `No answer ${f.attempts}× · stopped calling${told(f)}`);
       case 'missed': return chip('warn', 'Missed (system was off)');
       default: return chip('', f.state);
     }
@@ -248,15 +250,15 @@
   function outChip(f, time) {
     switch (f.state) {
       case 'waiting': return chip('', time ? `Check at ${hhmm(time)}` : 'No check call');
-      case 'calling': return chip('info', `Calling now (try ${f.attempts})`);
+      case 'calling': return chip(f.ownerAlerted ? 'bad' : 'info', `Calling now (try ${f.attempts})${told(f)}`);
       case 'scheduled': return f.result === 'not_yet' && f.attempts === 0
         ? chip('warn', `Belum keluar · asking again ${fmtTime(f.nextAt)}`)
-        : chip('warn', `No answer · trying again ${fmtTime(f.nextAt)}`);
+        : chip(f.ownerAlerted ? 'bad' : 'warn', `No answer ${f.attempts}× · ${again(f)}${told(f)}`);
       case 'done': return chip('ok', `Dah keluar · ${fmtTime(f.doneAt)}`);
       case 'alerted':
         if (f.result === 'problem') return chip('bad', 'Problem · you were called');
         if (f.result === 'not_out') return chip('bad', `Still not out · you were called`);
-        return chip('bad', `No answer ${f.attempts}× · you were called`);
+        return chip('bad', `No answer ${f.attempts}× · stopped calling${told(f)}`);
       case 'missed': return chip('warn', 'Missed (system was off)');
       default: return chip('', f.state);
     }
@@ -365,6 +367,7 @@
       case 'problem': return `${who} pressed problem${e.said ? `: “${e.said}”` : ''}`;
       case 'no_answer': return `${who} did not answer the ${call} (try ${e.attempt})`;
       case 'missed': return `Skipped ${call} for ${who}: system was off`;
+      case 'gave_up': return `Stopped calling ${who} after ${e.attempt} tries (${call})`;
       case 'alert_owner': return `Calling you: ${e.message}`;
       case 'owner_confirmed': return 'You confirmed the alert call';
       case 'owner_no_answer': return `You did not answer the alert call (${e.attempts} tries)`;

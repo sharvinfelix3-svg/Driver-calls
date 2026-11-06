@@ -25,7 +25,7 @@ function sayText(twiml) {
   return [...String(twiml).matchAll(/<Say[^>]*>([\s\S]*?)<\/Say>/g)].map((m) => m[1]).join(' ');
 }
 
-function createEngine({ config, store, client = null, now = () => Date.now(), classify = classifyOutAnswer, log = console }) {
+function createEngine({ config, store, client = null, now = () => Date.now(), classify = classifyOutAnswer, log = console, later = () => {} }) {
   const rules = config.rules;
   const db = () => store.data;
   const lp = (ms = now()) => localParts(ms, config.timezone);
@@ -377,7 +377,11 @@ function createEngine({ config, store, client = null, now = () => Date.now(), cl
       processAlerts().catch((e) => log.error(`[alert] ${e.message}`));
       return;
     }
-    if (!call.handled && !call.test) driverCallUnanswered(call);
+    if (!call.handled && !call.test) {
+      driverCallUnanswered(call);
+      // Call again right away instead of waiting for the next clock check
+      later(() => tick(), 3000);
+    }
     store.save();
   }
 
@@ -386,19 +390,24 @@ function createEngine({ config, store, client = null, now = () => Date.now(), cl
     const flow = rec && rec[call.kind];
     if (!flow || flow.cid !== call.cid || flow.state !== 'calling') return;
     const driver = driverById(call.driverId);
-    const max = call.kind === 'wake' ? rules.wakeMaxAttempts : rules.outMaxAttempts;
+    const alertAfter = call.kind === 'wake' ? rules.wakeMaxAttempts : rules.outMaxAttempts;
+    const maxCalls = Math.max(alertAfter, call.kind === 'wake' ? rules.wakeMaxCalls : rules.outMaxCalls);
     const gap = call.kind === 'wake' ? rules.wakeRetryMinutes : rules.outRetryMinutes;
     addLog({ driverId: call.driverId, kind: call.kind, event: 'no_answer', attempt: flow.attempts, status: call.status });
 
-    if (flow.attempts >= max) {
+    // Missed enough calls: phone the boss once, but keep calling the driver
+    if (flow.attempts >= alertAfter && !flow.ownerAlerted && driver) {
+      flow.ownerAlerted = true;
+      const O = M.owner[config.owner.lang];
+      const msg = call.kind === 'wake' ? O.wakeNoAnswer(driver, flow.attempts) : O.outNoAnswer(driver, flow.attempts);
+      alertOwner(`${msg} ${O.number(driver)}`, { driverId: driver.id, reason: `${call.kind}_no_answer` });
+    }
+
+    if (flow.attempts >= maxCalls) {
       flow.state = 'alerted';
       flow.result = 'no_answer';
       flow.doneAt = now();
-      if (driver) {
-        const O = M.owner[config.owner.lang];
-        const msg = call.kind === 'wake' ? O.wakeNoAnswer(driver, flow.attempts) : O.outNoAnswer(driver, flow.attempts);
-        alertOwner(`${msg} ${O.number(driver)}`, { driverId: driver.id, reason: `${call.kind}_no_answer` });
-      }
+      addLog({ driverId: call.driverId, kind: call.kind, event: 'gave_up', attempt: flow.attempts });
     } else {
       flow.state = 'scheduled';
       flow.nextAt = now() + gap * 60000;

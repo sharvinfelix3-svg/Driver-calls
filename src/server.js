@@ -146,7 +146,11 @@ function start() {
   const config = load();
   const store = createStore(path.resolve(config.dataDir, 'db.json'));
   const client = makeProvider(config);
-  const engine = createEngine({ config, store, client });
+  const later = (fn, ms) => {
+    const t = setTimeout(fn, ms);
+    if (t.unref) t.unref();
+  };
+  const engine = createEngine({ config, store, client, later });
   const app = createApp({ config, engine, provider: client });
 
   app.listen(config.port, () => {

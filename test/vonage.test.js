@@ -179,7 +179,9 @@ test('Vonage: driver never answers -> retries, then boss is called', async () =>
       await postJson(call.event_url[0], { status: 'timeout' });
     }
     await new Promise((r) => setImmediate(r));
-    assert.equal(h.store.data.days['2026-11-09'][d.id].out.result, 'no_answer');
+    const flow = h.store.data.days['2026-11-09'][d.id].out;
+    assert.equal(flow.ownerAlerted, true);
+    assert.equal(flow.state, 'scheduled', 'keeps calling the driver');
     const ownerCall = h.sent[h.sent.length - 1].body;
     assert.deepEqual(ownerCall.to, [{ type: 'phone', number: '60146472974' }]);
     assert.match(ownerCall.ncco[0].text, /Ali tak angkat/);
