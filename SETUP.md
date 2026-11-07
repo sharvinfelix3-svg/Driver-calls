@@ -85,6 +85,8 @@ Each customer gets their own copy (own link, own `ADMIN_TOKEN`). You keep the Ra
 4. When they pay: **Seller → +1 month** (or +3 / +12). Paid early adds on top of the end date; paid late starts from today. Calls start again on the next tick.
 5. **Remove time limit** makes it run with no end date (use this for your own company).
 
+**Without the seller password:** in **Railway → Variables** on the customer's copy, add `TRIAL_UNTIL` (e.g. `14/11/2026`) or, once they pay, `PAID_UNTIL`. It's applied when Railway redeploys, and again each time you change the value.
+
 A copy with no trial or paid date set has no time limit.
 
 ## Day-to-day

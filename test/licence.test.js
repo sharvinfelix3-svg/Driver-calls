@@ -67,6 +67,30 @@ test('paying early adds on top; set a date; remove the limit', () => {
   assert.throws(() => h.engine.setLicence({ action: 'free-forever' }), /Unknown/);
 });
 
+test('Railway variable TRIAL_UNTIL / PAID_UNTIL sets it, once per change', () => {
+  const { load } = require('../src/config');
+  assert.deepEqual(load({ TRIAL_UNTIL: '14/11/2026' }).seller.fromEnv, { kind: 'trial', until: '2026-11-14' });
+  assert.deepEqual(load({ TRIAL_UNTIL: '2026-11-14', PAID_UNTIL: '1/1/2027' }).seller.fromEnv, { kind: 'paid', until: '2027-01-01' });
+  assert.equal(load({ TRIAL_UNTIL: '31/02/2026' }).seller.fromEnv, null);
+  assert.deepEqual(load({ TRIAL_UNTIL: 'next week' }).seller.badEnv, ['TRIAL_UNTIL']);
+
+  const os = require('os');
+  const fs = require('fs');
+  const path = require('path');
+  const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'lic-')), 'data.json');
+  const h = setup({ env: { TRIAL_UNTIL: '14/11/2026' }, storePath: file });
+  assert.deepEqual([h.engine.licenceStatus().kind, h.engine.licenceStatus().until], ['trial', '2026-11-14']);
+
+  // Seller extends on the page; a restart with the same variable must not undo it
+  h.engine.setLicence({ action: 'paid', months: 1 });
+  const again = setup({ env: { TRIAL_UNTIL: '14/11/2026' }, storePath: file });
+  assert.deepEqual([again.engine.licenceStatus().kind, again.engine.licenceStatus().until], ['paid', '2026-12-14']);
+
+  // Changing the variable applies the new value
+  const changed = setup({ env: { PAID_UNTIL: '2027-03-01' }, storePath: file });
+  assert.equal(changed.engine.licenceStatus().until, '2027-03-01');
+});
+
 test('only the seller password can change it, not the customer password', async () => {
   const run = async (env, fn) => {
     const h = setup({ env });

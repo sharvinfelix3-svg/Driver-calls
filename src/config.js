@@ -8,6 +8,17 @@ const { normalizePhone } = require('./phone');
 const num = (v, d) => (v === undefined || v === '' || Number.isNaN(Number(v)) ? d : Number(v));
 const bool = (v, d) => (v === undefined || v === '' ? d : /^(1|true|yes|on)$/i.test(String(v)));
 
+/** '2026-11-14' or '14/11/2026' -> '2026-11-14'; anything else -> '' */
+function dateInput(v) {
+  const s = String(v || '').trim();
+  let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  const [y, mo, d] = m ? [m[1], m[2], m[3]] : (m = s.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$/)) ? [m[3], m[2], m[1]] : [];
+  if (!y) return '';
+  const iso = `${y}-${mo.padStart(2, '0')}-${d.padStart(2, '0')}`;
+  const t = new Date(iso + 'T00:00:00Z');
+  return !Number.isNaN(t.getTime()) && t.toISOString().slice(0, 10) === iso ? iso : '';
+}
+
 // Default voices for each calling service
 const VOICE_DEFAULTS = {
   twilio: { ms: 'Google.ms-MY-Standard-A', en: 'Google.en-US-Standard-C' },
@@ -94,6 +105,16 @@ function load(env = process.env) {
     seller: {
       token: env.SELLER_TOKEN || '',
       contact: env.SELLER_CONTACT || '014-647 2974',
+      // Or set it straight from Railway Variables: TRIAL_UNTIL=14/11/2026 or PAID_UNTIL=14/12/2026.
+      // Applied when the value changes; the Seller button on the page can still change it after.
+      fromEnv: dateInput(env.PAID_UNTIL)
+        ? { kind: 'paid', until: dateInput(env.PAID_UNTIL) }
+        : dateInput(env.TRIAL_UNTIL)
+          ? { kind: 'trial', until: dateInput(env.TRIAL_UNTIL) }
+          : null,
+      badEnv: [['PAID_UNTIL', env.PAID_UNTIL], ['TRIAL_UNTIL', env.TRIAL_UNTIL]]
+        .filter(([, v]) => v && !dateInput(v))
+        .map(([k]) => k),
     },
 
     owner: {

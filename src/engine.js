@@ -100,6 +100,21 @@ function createEngine({ config, store, client = null, gps = null, now = () => Da
     return licenceStatus();
   }
 
+  /** TRIAL_UNTIL / PAID_UNTIL on Railway: applied once each time you change the value. */
+  function applyEnvLicence() {
+    for (const k of config.seller.badEnv || []) log.warn(`[licence] ${k} should be a date like 14/11/2026 — ignored`);
+    const want = config.seller.fromEnv;
+    if (!want) return;
+    const d = db();
+    const key = `${want.kind}:${want.until}`;
+    if (d.licenceFromEnv === key) return; // already applied (the Seller button may have changed it since)
+    d.licence = { kind: want.kind, until: want.until };
+    d.licenceFromEnv = key;
+    addLog({ event: 'licence', kind: want.kind, until: want.until });
+    store.save();
+    log.info(`[licence] ${want.kind === 'trial' ? 'Free trial' : 'Paid'} until ${want.until} (from Railway variable)`);
+  }
+
   const driverById = (id) => db().drivers.find((d) => d.id === id);
   const langOf = (driver) => (driver && driver.lang === 'en' ? 'en' : 'ms');
   const hookUrl = (path, cid) =>
@@ -823,6 +838,8 @@ function createEngine({ config, store, client = null, gps = null, now = () => Da
       rules,
     };
   }
+
+  applyEnvLicence();
 
   return {
     tick,
